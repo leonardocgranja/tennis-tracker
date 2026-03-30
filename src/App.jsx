@@ -1,75 +1,73 @@
 import { useState, useEffect, useRef } from "react";
+import { createClient } from "@supabase/supabase-js";
 
-const STORAGE_KEY = "tennis-match-data";
+// ─── Supabase ────────────────────────────────────────────────────────────────
+const SUPABASE_URL = "https://jokntxttmillstkpyoaq.supabase.co";
+const SUPABASE_KEY = "sb_publishable_nRuJ-FVLvkjyk0tJMwOLTg_VztF_9sg";
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const MATCH_ID = "main";
+const ADMIN_PASSWORD = "mariaamelia2025";
 
-// ─── helpers ────────────────────────────────────────────────────────────────
+// ─── Tennis helpers ──────────────────────────────────────────────────────────
 const TENNIS_POINTS = ["0", "15", "30", "40", "AD"];
+const pt = (p) => TENNIS_POINTS[p] ?? p;
 
 function calcPoint(score, winner) {
-  const s = { ...score };
+  const s = { ...score, sets: [...score.sets] };
   const opp = winner === "p1" ? "p2" : "p1";
   const wp = s[winner + "Points"];
   const op = s[opp + "Points"];
-
-  // deuce / advantage logic
-  if (wp === 3 && op === 3) { s[winner + "Points"] = 4; return s; } // AD
-  if (wp === 4) { // AD holder wins
-    s[winner + "Games"]++;
-    s.p1Points = 0; s.p2Points = 0;
-    return checkSet(s, winner);
-  }
-  if (op === 4) { // AD holder loses → back to deuce
-    s[winner + "Points"] = 3; s[opp + "Points"] = 3; return s;
-  }
-  if (wp === 3 && op < 3) { // 40 and other not at 40 → game
-    s[winner + "Games"]++;
-    s.p1Points = 0; s.p2Points = 0;
-    return checkSet(s, winner);
-  }
+  if (wp === 3 && op === 3) { s[winner + "Points"] = 4; return s; }
+  if (wp === 4) { s[winner + "Games"]++; s.p1Points = 0; s.p2Points = 0; return checkSet(s, winner); }
+  if (op === 4) { s[winner + "Points"] = 3; s[opp + "Points"] = 3; return s; }
+  if (wp === 3 && op < 3) { s[winner + "Games"]++; s.p1Points = 0; s.p2Points = 0; return checkSet(s, winner); }
   s[winner + "Points"]++;
   return s;
 }
 
 function checkSet(s, winner) {
   const opp = winner === "p1" ? "p2" : "p1";
-  const wg = s[winner + "Games"];
-  const og = s[opp + "Games"];
+  const wg = s[winner + "Games"], og = s[opp + "Games"];
   if ((wg >= 6 && wg - og >= 2) || wg === 7) {
     s[winner + "Sets"]++;
-    s.sets.push({ p1: s.p1Games, p2: s.p2Games });
+    s.sets = [...s.sets, { p1: s.p1Games, p2: s.p2Games }];
     s.p1Games = 0; s.p2Games = 0;
   }
   return s;
 }
 
-const emptyStats = () => ({
-  aces: 0, winners: 0, unforced: 0, points: 0
+const emptyStats = () => ({ aces: 0, winners: 0, unforced: 0, points: 0 });
+const emptyScore = () => ({ p1Points: 0, p2Points: 0, p1Games: 0, p2Games: 0, p1Sets: 0, p2Sets: 0, sets: [] });
+const emptyMatch = () => ({
+  score: emptyScore(),
+  stats: { p1: emptyStats(), p2: emptyStats() },
+  events: [],
+  likes: 0,
+  matchState: "idle",
+  p1Name: "Maria Amélia",
+  p2Name: "Adversária",
+  p1Photo: null,
+  p2Photo: null,
+  surface: "Saibro",
+  tournament: "",
+  weather: null,
+  location: null,
 });
 
-const emptyScore = () => ({
-  p1Points: 0, p2Points: 0,
-  p1Games: 0, p2Games: 0,
-  p1Sets: 0, p2Sets: 0,
-  sets: []
-});
-
-// ─── components ─────────────────────────────────────────────────────────────
-
+// ─── Sub-components ──────────────────────────────────────────────────────────
 function Avatar({ src, name, size = 80 }) {
   const initials = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   return (
     <div style={{
       width: size, height: size, borderRadius: "50%",
       background: src ? "transparent" : "linear-gradient(135deg,#c9a96e,#8b6914)",
-      border: "3px solid #c9a96e",
-      overflow: "hidden", display: "flex", alignItems: "center",
-      justifyContent: "center", flexShrink: 0,
+      border: "3px solid #c9a96e", overflow: "hidden",
+      display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
       boxShadow: "0 4px 20px rgba(201,169,110,0.35)"
     }}>
       {src
         ? <img src={src} alt={name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-        : <span style={{ color: "#fff", fontWeight: 700, fontSize: size * 0.32, fontFamily: "serif" }}>{initials}</span>
-      }
+        : <span style={{ color: "#fff", fontWeight: 700, fontSize: size * 0.32, fontFamily: "serif" }}>{initials}</span>}
     </div>
   );
 }
@@ -91,164 +89,167 @@ function StatBar({ label, v1, v2 }) {
   );
 }
 
-// ─── main app ────────────────────────────────────────────────────────────────
+function weatherIcon(code) {
+  if (code === 0) return "☀️";
+  if (code <= 3) return "⛅";
+  if (code <= 67) return "🌧️";
+  if (code <= 77) return "❄️";
+  return "⛈️";
+}
+
+// ─── Main App ────────────────────────────────────────────────────────────────
 export default function TennisApp() {
+  // mode: "choose" | "viewer" | "admin"
+  const [mode, setMode] = useState("choose");
+  const [adminInput, setAdminInput] = useState("");
+  const [adminError, setAdminError] = useState(false);
   const [tab, setTab] = useState("placar");
-  const [matchState, setMatchState] = useState("idle"); // idle | active | finished
-  const [score, setScore] = useState(emptyScore());
-  const [stats, setStats] = useState({ p1: emptyStats(), p2: emptyStats() });
-  const [rally, setRally] = useState(null); // {winner} waiting for shot type
-  const [events, setEvents] = useState([]);
+  const [match, setMatch] = useState(emptyMatch());
+  const [rally, setRally] = useState(null);
   const [comments, setComments] = useState([]);
   const [commentText, setCommentText] = useState("");
   const [commentName, setCommentName] = useState("");
-  const [likes, setLikes] = useState(0);
-  const [location, setLocation] = useState(null);
-  const [weather, setWeather] = useState(null);
   const [loadingWeather, setLoadingWeather] = useState(false);
-  const [p1Photo, setP1Photo] = useState(null);
-  const [p2Photo, setP2Photo] = useState(null);
-  const [p1Name, setP1Name] = useState("Maria Amélia");
-  const [p2Name, setP2Name] = useState("Adversária");
-  const [surface, setSurface] = useState("Saibro");
-  const [tournament, setTournament] = useState("");
-  const [editingProfiles, setEditingProfiles] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState(null);
   const p1PhotoRef = useRef();
   const p2PhotoRef = useRef();
   const commentsEndRef = useRef();
 
-  // persist
-  useEffect(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-      if (saved.score) setScore(saved.score);
-      if (saved.stats) setStats(saved.stats);
-      if (saved.events) setEvents(saved.events);
-      if (saved.comments) setComments(saved.comments);
-      if (saved.likes) setLikes(saved.likes);
-      if (saved.matchState) setMatchState(saved.matchState);
-      if (saved.p1Name) setP1Name(saved.p1Name);
-      if (saved.p2Name) setP2Name(saved.p2Name);
-      if (saved.surface) setSurface(saved.surface);
-      if (saved.tournament) setTournament(saved.tournament);
-      if (saved.weather) setWeather(saved.weather);
-      if (saved.location) setLocation(saved.location);
-    } catch {}
-  }, []);
+  const isAdmin = mode === "admin";
 
+  // ── Load initial data + subscribe realtime ──────────────────────────────
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        score, stats, events, comments, likes, matchState,
-        p1Name, p2Name, surface, tournament, weather, location
-      }));
-    } catch {}
-  }, [score, stats, events, comments, likes, matchState, p1Name, p2Name, surface, tournament, weather, location]);
+    if (mode === "choose") return;
+    loadMatch();
+    loadComments();
 
-  useEffect(() => {
-    commentsEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [comments]);
+    const matchSub = supabase
+      .channel("match-changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "matches", filter: `id=eq.${MATCH_ID}` },
+        (payload) => { if (payload.new?.data) setMatch(payload.new.data); setLastSync(new Date()); }
+      ).subscribe();
 
+    const commentSub = supabase
+      .channel("comment-changes")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "comments", filter: `match_id=eq.${MATCH_ID}` },
+        (payload) => { setComments(prev => [...prev, payload.new]); }
+      ).subscribe();
+
+    return () => { supabase.removeChannel(matchSub); supabase.removeChannel(commentSub); };
+  }, [mode]);
+
+  useEffect(() => { commentsEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [comments]);
+
+  async function loadMatch() {
+    const { data } = await supabase.from("matches").select("data").eq("id", MATCH_ID).single();
+    if (data?.data) { setMatch(data.data); setLastSync(new Date()); }
+  }
+
+  async function loadComments() {
+    const { data } = await supabase.from("comments").select("*").eq("match_id", MATCH_ID).order("created_at", { ascending: true });
+    if (data) setComments(data);
+  }
+
+  async function saveMatch(newMatch) {
+    setSyncing(true);
+    await supabase.from("matches").upsert({ id: MATCH_ID, data: newMatch, updated_at: new Date().toISOString() });
+    setSyncing(false);
+    setLastSync(new Date());
+  }
+
+  function updateMatch(updater) {
+    setMatch(prev => {
+      const next = updater(prev);
+      saveMatch(next);
+      return next;
+    });
+  }
+
+  // ── Admin login ──────────────────────────────────────────────────────────
+  function handleAdminLogin() {
+    if (adminInput === ADMIN_PASSWORD) { setMode("admin"); setAdminError(false); }
+    else { setAdminError(true); }
+  }
+
+  // ── Check-in ─────────────────────────────────────────────────────────────
   async function handleCheckin() {
     setLoadingWeather(true);
-    try {
-      navigator.geolocation.getCurrentPosition(async (pos) => {
-        const { latitude: lat, longitude: lon } = pos.coords;
-        const res = await fetch(
-          `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=relativehumidity_2m&timezone=auto`
-        );
-        const data = await res.json();
-        const cw = data.current_weather;
-        const locRes = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`
-        );
-        const locData = await locRes.json();
-        const city = locData.address?.city || locData.address?.town || locData.address?.village || "Localização";
-        const state = locData.address?.state || "";
-        setLocation(`${city}${state ? ", " + state : ""}`);
-        setWeather({ temp: Math.round(cw.temperature), wind: Math.round(cw.windspeed), code: cw.weathercode });
-        setLoadingWeather(false);
-      }, () => {
-        setLocation("Localização não disponível");
-        setLoadingWeather(false);
-      });
-    } catch {
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      const { latitude: lat, longitude: lon } = pos.coords;
+      try {
+        const [wRes, lRes] = await Promise.all([
+          fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&timezone=auto`),
+          fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`)
+        ]);
+        const wData = await wRes.json();
+        const lData = await lRes.json();
+        const cw = wData.current_weather;
+        const city = lData.address?.city || lData.address?.town || lData.address?.village || "Local";
+        const state = lData.address?.state || "";
+        const location = `${city}${state ? ", " + state : ""}`;
+        const weather = { temp: Math.round(cw.temperature), wind: Math.round(cw.windspeed), code: cw.weathercode };
+        updateMatch(m => ({ ...m, location, weather }));
+      } catch {}
       setLoadingWeather(false);
-    }
+    }, () => setLoadingWeather(false));
   }
 
-  function weatherIcon(code) {
-    if (code === 0) return "☀️";
-    if (code <= 3) return "⛅";
-    if (code <= 67) return "🌧️";
-    if (code <= 77) return "❄️";
-    return "⛈️";
-  }
-
-  function handlePoint(winner) {
-    setRally({ winner });
-  }
+  // ── Point flow ───────────────────────────────────────────────────────────
+  function handlePoint(winner) { setRally({ winner }); }
 
   function handleShot(type) {
     const w = rally.winner;
-    const newScore = calcPoint({ ...score }, w);
-    const newStats = {
-      p1: { ...stats.p1 },
-      p2: { ...stats.p2 }
-    };
-    newStats[w].points++;
-    if (type === "ace") newStats[w].aces++;
-    if (type === "winner") newStats[w].winners++;
-    if (type === "unforced") {
-      const opp = w === "p1" ? "p2" : "p1";
-      newStats[opp].unforced++;
-    }
-
+    const opp = w === "p1" ? "p2" : "p1";
     const shotLabels = { ace: "🎯 ACE", winner: "⚡ Winner", point: "✅ Ponto", unforced: "❌ Erro não forçado" };
-    const wName = w === "p1" ? p1Name : p2Name;
+    const wName = w === "p1" ? match.p1Name : match.p2Name;
     const eventText = type === "unforced"
-      ? `Erro não forçado de ${w === "p1" ? p2Name : p1Name} → ponto para ${wName}`
+      ? `Erro não forçado → ponto para ${wName}`
       : `${shotLabels[type]} de ${wName}`;
 
-    setEvents(prev => [{ text: eventText, time: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) }, ...prev].slice(0, 50));
-    setScore(newScore);
-    setStats(newStats);
+    updateMatch(m => {
+      const newScore = calcPoint(m.score, w);
+      const newStats = { p1: { ...m.stats.p1 }, p2: { ...m.stats.p2 } };
+      newStats[w].points++;
+      if (type === "ace") newStats[w].aces++;
+      if (type === "winner") newStats[w].winners++;
+      if (type === "unforced") newStats[opp].unforced++;
+      const newEvent = { text: eventText, time: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) };
+      return { ...m, score: newScore, stats: newStats, events: [newEvent, ...m.events].slice(0, 60) };
+    });
     setRally(null);
   }
 
+  // ── Photo upload ─────────────────────────────────────────────────────────
   function handlePhotoUpload(player, e) {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      if (player === "p1") setP1Photo(ev.target.result);
-      else setP2Photo(ev.target.result);
-    };
+    reader.onload = (ev) => updateMatch(m => ({ ...m, [player + "Photo"]: ev.target.result }));
     reader.readAsDataURL(file);
   }
 
-  function postComment() {
+  // ── Comment ──────────────────────────────────────────────────────────────
+  async function postComment() {
     if (!commentText.trim()) return;
-    setComments(prev => [...prev, {
+    await supabase.from("comments").insert({
+      match_id: MATCH_ID,
       name: commentName.trim() || "Torcedor",
       text: commentText.trim(),
-      time: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-      id: Date.now()
-    }]);
+    });
     setCommentText("");
   }
 
+  // ── Likes ────────────────────────────────────────────────────────────────
+  function addLike() { updateMatch(m => ({ ...m, likes: (m.likes || 0) + 1 })); }
+
+  // ── Reset ────────────────────────────────────────────────────────────────
   function resetMatch() {
-    setScore(emptyScore());
-    setStats({ p1: emptyStats(), p2: emptyStats() });
-    setEvents([]);
+    updateMatch(m => ({ ...m, score: emptyScore(), stats: { p1: emptyStats(), p2: emptyStats() }, events: [], matchState: "idle" }));
     setRally(null);
-    setMatchState("idle");
   }
 
-  const pt = (p) => TENNIS_POINTS[p] || p;
-
-  // ─── styles ───────────────────────────────────────────────────────────────
+  // ─── Styles ──────────────────────────────────────────────────────────────
   const bg = "#0d0d1a";
   const card = "rgba(255,255,255,0.04)";
   const gold = "#c9a96e";
@@ -258,70 +259,125 @@ export default function TennisApp() {
   const muted = "#8b7355";
 
   const tabStyle = (t) => ({
-    padding: "10px 18px",
-    border: "none",
+    padding: "10px 16px", border: "none",
     background: tab === t ? "linear-gradient(135deg,#c9a96e,#8b6914)" : "transparent",
     color: tab === t ? "#0d0d1a" : muted,
     fontWeight: tab === t ? 800 : 500,
-    borderRadius: 8,
-    cursor: "pointer",
-    fontSize: 13,
-    letterSpacing: 0.5,
-    transition: "all .2s",
-    fontFamily: "Georgia, serif"
+    borderRadius: 8, cursor: "pointer", fontSize: 13,
+    letterSpacing: 0.5, transition: "all .2s", fontFamily: "Georgia, serif"
   });
 
   const btnStyle = (color = gold) => ({
     padding: "14px 24px",
     background: `linear-gradient(135deg,${color},${color}bb)`,
     color: color === gold ? "#0d0d1a" : "#fff",
-    border: "none",
-    borderRadius: 12,
-    fontWeight: 800,
-    fontSize: 15,
-    cursor: "pointer",
-    letterSpacing: 0.5,
+    border: "none", borderRadius: 12, fontWeight: 800,
+    fontSize: 15, cursor: "pointer", letterSpacing: 0.5,
     boxShadow: `0 4px 20px ${color}44`,
-    transition: "transform .15s, box-shadow .15s",
-    fontFamily: "Georgia, serif"
+    transition: "transform .15s", fontFamily: "Georgia, serif"
   });
 
+  const inputStyle = {
+    width: "100%", padding: "12px 16px", borderRadius: 10,
+    background: "rgba(255,255,255,0.06)", border: "1px solid rgba(201,169,110,0.2)",
+    color: text, fontSize: 14, boxSizing: "border-box", fontFamily: "Georgia, serif",
+    outline: "none"
+  };
+
+  // ─── MODE: CHOOSE ────────────────────────────────────────────────────────
+  if (mode === "choose") {
+    return (
+      <div style={{
+        minHeight: "100vh", background: bg, display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "center", padding: 24,
+        backgroundImage: "radial-gradient(ellipse at 20% 20%, rgba(124,111,158,0.15) 0%, transparent 60%)"
+      }}>
+        <div style={{ fontSize: 56, marginBottom: 16 }}>🎾</div>
+        <div style={{ fontSize: 28, fontWeight: 900, color: gold, marginBottom: 8, fontFamily: "Georgia, serif", textAlign: "center" }}>Tennis Tracker</div>
+        <div style={{ color: muted, marginBottom: 48, textAlign: "center", fontSize: 14 }}>Acompanhe a partida em tempo real</div>
+
+        <div style={{ width: "100%", maxWidth: 360, display: "flex", flexDirection: "column", gap: 16 }}>
+          <button onClick={() => { setMode("viewer"); setTab("placar"); }}
+            style={{ ...btnStyle(purple), padding: 20, fontSize: 16, width: "100%" }}>
+            👁️ Assistir ao vivo
+          </button>
+
+          <div style={{ background: card, border: `1px solid rgba(201,169,110,0.2)`, borderRadius: 16, padding: 20 }}>
+            <div style={{ color: gold, fontWeight: 700, marginBottom: 12, fontSize: 13 }}>🔒 Acesso Admin</div>
+            <input
+              type="password" placeholder="Senha" value={adminInput}
+              onChange={e => setAdminInput(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleAdminLogin()}
+              style={{ ...inputStyle, marginBottom: 10 }}
+            />
+            {adminError && <div style={{ color: "#e05050", fontSize: 12, marginBottom: 8 }}>Senha incorreta</div>}
+            <button onClick={handleAdminLogin} style={{ ...btnStyle(), width: "100%", padding: 14 }}>
+              Entrar como Admin
+            </button>
+          </div>
+        </div>
+
+        <div style={{ color: muted, fontSize: 11, marginTop: 32, textAlign: "center" }}>
+          Senha padrão: mariaamelia2025
+        </div>
+      </div>
+    );
+  }
+
+  // ─── TABS available per mode ─────────────────────────────────────────────
+  const viewerTabs = ["placar", "estatísticas", "torcida"];
+  const adminTabs = ["placar", "controle", "estatísticas", "torcida", "perfis"];
+  const tabs = isAdmin ? adminTabs : viewerTabs;
+
+  // ─── RENDER ──────────────────────────────────────────────────────────────
   return (
     <div style={{
-      minHeight: "100vh", background: bg, color: text,
-      fontFamily: "'Georgia', serif",
+      minHeight: "100vh", background: bg, color: text, fontFamily: "Georgia, serif",
       backgroundImage: "radial-gradient(ellipse at 20% 20%, rgba(124,111,158,0.15) 0%, transparent 60%), radial-gradient(ellipse at 80% 80%, rgba(201,169,110,0.08) 0%, transparent 60%)"
     }}>
-      {/* header */}
+      {/* Header */}
       <div style={{
         background: "rgba(13,13,26,0.95)", backdropFilter: "blur(20px)",
         borderBottom: `1px solid rgba(201,169,110,0.2)`,
-        padding: "16px 20px", position: "sticky", top: 0, zIndex: 100
+        padding: "14px 20px", position: "sticky", top: 0, zIndex: 100
       }}>
         <div style={{ maxWidth: 700, margin: "0 auto" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
-            <div style={{ fontSize: 24 }}>🎾</div>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 18, color: gold, letterSpacing: 1 }}>
-                {tournament || "Tênis ao Vivo"}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+            <div style={{ fontSize: 22 }}>🎾</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 800, fontSize: 17, color: gold, letterSpacing: 0.5 }}>
+                {match.tournament || "Tennis Tracker"}
               </div>
-              <div style={{ fontSize: 12, color: muted }}>
-                {surface} {location && `· ${location}`} {weather && `· ${weatherIcon(weather.code)} ${weather.temp}°C`}
+              <div style={{ fontSize: 11, color: muted }}>
+                {match.surface}
+                {match.location && ` · ${match.location}`}
+                {match.weather && ` · ${weatherIcon(match.weather.code)} ${match.weather.temp}°C`}
               </div>
             </div>
-            {matchState === "active" && (
-              <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#4ade80", animation: "pulse 1.5s infinite" }} />
-                <span style={{ fontSize: 12, color: "#4ade80", fontWeight: 700 }}>AO VIVO</span>
-              </div>
-            )}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
+              {match.matchState === "active" && (
+                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#4ade80", animation: "pulse 1.5s infinite" }} />
+                  <span style={{ fontSize: 11, color: "#4ade80", fontWeight: 700 }}>AO VIVO</span>
+                </div>
+              )}
+              {syncing && <span style={{ fontSize: 10, color: muted }}>Sincronizando...</span>}
+              {!syncing && lastSync && <span style={{ fontSize: 10, color: muted }}>✓ Atualizado</span>}
+              {isAdmin && (
+                <span style={{ fontSize: 10, background: "rgba(201,169,110,0.15)", color: gold, padding: "2px 7px", borderRadius: 6 }}>ADMIN</span>
+              )}
+            </div>
           </div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {["placar", "controle", "estatísticas", "torcida", "perfis"].map(t => (
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+            {tabs.map(t => (
               <button key={t} style={tabStyle(t)} onClick={() => setTab(t)}>
                 {t.charAt(0).toUpperCase() + t.slice(1)}
               </button>
             ))}
+            <button onClick={() => setMode("choose")}
+              style={{ marginLeft: "auto", padding: "10px 12px", background: "transparent", border: "none", color: muted, cursor: "pointer", fontSize: 12 }}>
+              ← Sair
+            </button>
           </div>
         </div>
       </div>
@@ -331,43 +387,45 @@ export default function TennisApp() {
         {/* ── PLACAR ── */}
         {tab === "placar" && (
           <div>
-            {/* scoreboard */}
-            <div style={{ background: card, border: `1px solid rgba(201,169,110,0.2)`, borderRadius: 20, padding: 24, marginBottom: 20, backdropFilter: "blur(10px)" }}>
-              {/* sets */}
-              {score.sets.length > 0 && (
-                <div style={{ display: "flex", justifyContent: "center", gap: 16, marginBottom: 20 }}>
-                  {score.sets.map((s, i) => (
-                    <div key={i} style={{ textAlign: "center", opacity: 0.6, fontSize: 13 }}>
-                      <div style={{ color: muted, fontSize: 10, marginBottom: 4 }}>SET {i + 1}</div>
-                      <div>{s.p1} – {s.p2}</div>
+            <div style={{ background: card, border: `1px solid rgba(201,169,110,0.2)`, borderRadius: 20, padding: 24, marginBottom: 20 }}>
+              {match.score.sets.length > 0 && (
+                <div style={{ display: "flex", justifyContent: "center", gap: 20, marginBottom: 20 }}>
+                  {match.score.sets.map((s, i) => (
+                    <div key={i} style={{ textAlign: "center", opacity: 0.65 }}>
+                      <div style={{ color: muted, fontSize: 10, marginBottom: 3 }}>SET {i + 1}</div>
+                      <div style={{ fontSize: 13 }}>{s.p1} – {s.p2}</div>
                     </div>
                   ))}
                 </div>
               )}
-
-              {[{ key: "p1", name: p1Name, photo: p1Photo }, { key: "p2", name: p2Name, photo: p2Photo }].map((p, i) => (
+              {[
+                { key: "p1", name: match.p1Name, photo: match.p1Photo },
+                { key: "p2", name: match.p2Name, photo: match.p2Photo }
+              ].map((p, i) => (
                 <div key={p.key}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "12px 0" }}>
-                    <Avatar src={p.photo} name={p.name} size={52} />
+                  <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 0" }}>
+                    <Avatar src={p.photo} name={p.name} size={50} />
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 700, fontSize: 16 }}>{p.name}</div>
-                      <div style={{ color: muted, fontSize: 12 }}>{stats[p.key].aces} aces · {stats[p.key].winners} winners</div>
+                      <div style={{ color: muted, fontSize: 12 }}>{match.stats[p.key].aces} aces · {match.stats[p.key].winners} winners</div>
                     </div>
-                    <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
-                      <div style={{ textAlign: "center" }}>
-                        <div style={{ color: muted, fontSize: 10, marginBottom: 2 }}>SETS</div>
-                        <div style={{ fontSize: 28, fontWeight: 900, color: gold }}>{score[p.key + "Sets"]}</div>
-                      </div>
-                      <div style={{ textAlign: "center" }}>
-                        <div style={{ color: muted, fontSize: 10, marginBottom: 2 }}>GAMES</div>
-                        <div style={{ fontSize: 28, fontWeight: 900 }}>{score[p.key + "Games"]}</div>
-                      </div>
-                      <div style={{ textAlign: "center" }}>
-                        <div style={{ color: muted, fontSize: 10, marginBottom: 2 }}>PONTOS</div>
-                        <div style={{ fontSize: 28, fontWeight: 900, color: p.key === "p1" && score.p1Points > score.p2Points ? goldLight : p.key === "p2" && score.p2Points > score.p1Points ? goldLight : text }}>
-                          {pt(score[p.key + "Points"])}
+                    <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
+                      {[
+                        { label: "SETS", v: match.score[p.key + "Sets"], big: true, highlight: false },
+                        { label: "GAMES", v: match.score[p.key + "Games"], big: true, highlight: false },
+                        { label: "PONTOS", v: pt(match.score[p.key + "Points"]), big: true, highlight: true },
+                      ].map(s => (
+                        <div key={s.label} style={{ textAlign: "center" }}>
+                          <div style={{ color: muted, fontSize: 9, marginBottom: 2, letterSpacing: 0.5 }}>{s.label}</div>
+                          <div style={{
+                            fontSize: 26, fontWeight: 900,
+                            color: s.highlight
+                              ? (p.key === "p1" && match.score.p1Points > match.score.p2Points) || (p.key === "p2" && match.score.p2Points > match.score.p1Points) ? goldLight : text
+                              : p.key === "p1" && s.label === "SETS" && match.score.p1Sets > match.score.p2Sets ? gold
+                                : p.key === "p2" && s.label === "SETS" && match.score.p2Sets > match.score.p1Sets ? gold : text
+                          }}>{s.v}</div>
                         </div>
-                      </div>
+                      ))}
                     </div>
                   </div>
                   {i === 0 && <div style={{ height: 1, background: "rgba(201,169,110,0.1)" }} />}
@@ -375,151 +433,136 @@ export default function TennisApp() {
               ))}
             </div>
 
-            {/* likes */}
-            <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
-              <button onClick={() => setLikes(l => l + 1)} style={{
-                ...btnStyle(purple), display: "flex", alignItems: "center", gap: 8, flex: 1, justifyContent: "center"
-              }}>
-                ❤️ {likes} curtidas
-              </button>
-            </div>
+            <button onClick={addLike} style={{ ...btnStyle(purple), width: "100%", marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+              ❤️ Torcer! ({match.likes || 0})
+            </button>
 
-            {/* event log */}
-            <div style={{ background: card, border: `1px solid rgba(201,169,110,0.1)`, borderRadius: 16, padding: 16 }}>
-              <div style={{ color: gold, fontWeight: 700, marginBottom: 12, fontSize: 13, letterSpacing: 1 }}>HISTÓRICO DE PONTOS</div>
-              {events.length === 0
-                ? <div style={{ color: muted, fontSize: 13, textAlign: "center", padding: "20px 0" }}>Nenhum ponto registrado ainda</div>
-                : events.map((e, i) => (
-                  <div key={i} style={{ display: "flex", gap: 12, padding: "8px 0", borderBottom: i < events.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
-                    <span style={{ color: muted, fontSize: 11, minWidth: 40 }}>{e.time}</span>
+            <div style={{ background: card, border: `1px solid rgba(201,169,110,0.1)`, borderRadius: 16, padding: 16, marginBottom: 20 }}>
+              <div style={{ color: gold, fontWeight: 700, marginBottom: 12, fontSize: 12, letterSpacing: 1 }}>HISTÓRICO</div>
+              {match.events.length === 0
+                ? <div style={{ color: muted, fontSize: 13, textAlign: "center", padding: "16px 0" }}>Nenhum ponto registrado ainda</div>
+                : match.events.map((e, i) => (
+                  <div key={i} style={{ display: "flex", gap: 10, padding: "7px 0", borderBottom: i < match.events.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
+                    <span style={{ color: muted, fontSize: 11, minWidth: 38 }}>{e.time}</span>
                     <span style={{ fontSize: 13 }}>{e.text}</span>
                   </div>
                 ))
               }
             </div>
 
-            {/* comments */}
-            <div style={{ background: card, border: `1px solid rgba(201,169,110,0.1)`, borderRadius: 16, padding: 16, marginTop: 20 }}>
-              <div style={{ color: gold, fontWeight: 700, marginBottom: 12, fontSize: 13, letterSpacing: 1 }}>COMENTÁRIOS DA TORCIDA</div>
+            {/* comments on placar tab */}
+            <div style={{ background: card, border: `1px solid rgba(201,169,110,0.1)`, borderRadius: 16, padding: 16 }}>
+              <div style={{ color: gold, fontWeight: 700, marginBottom: 12, fontSize: 12, letterSpacing: 1 }}>COMENTÁRIOS</div>
               <div style={{ maxHeight: 200, overflowY: "auto", marginBottom: 12 }}>
                 {comments.length === 0
-                  ? <div style={{ color: muted, fontSize: 13, textAlign: "center", padding: "12px 0" }}>Seja o primeiro a comentar!</div>
+                  ? <div style={{ color: muted, fontSize: 13, textAlign: "center", padding: "12px 0" }}>Nenhum comentário ainda</div>
                   : comments.map(c => (
-                    <div key={c.id} style={{ padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                      <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
-                        <span style={{ color: gold, fontWeight: 700, fontSize: 13 }}>{c.name}</span>
-                        <span style={{ color: muted, fontSize: 10 }}>{c.time}</span>
+                    <div key={c.id} style={{ padding: "7px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <span style={{ color: gold, fontWeight: 700, fontSize: 12 }}>{c.name}</span>
+                        <span style={{ color: muted, fontSize: 10 }}>{new Date(c.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
                       </div>
-                      <div style={{ fontSize: 13, marginTop: 2 }}>{c.text}</div>
+                      <div style={{ fontSize: 13 }}>{c.text}</div>
                     </div>
                   ))
                 }
                 <div ref={commentsEndRef} />
               </div>
               <div style={{ display: "flex", gap: 8 }}>
-                <input value={commentName} onChange={e => setCommentName(e.target.value)} placeholder="Seu nome"
-                  style={{ width: 100, padding: "8px 12px", borderRadius: 8, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(201,169,110,0.2)", color: text, fontSize: 13, fontFamily: "Georgia, serif" }} />
+                <input value={commentName} onChange={e => setCommentName(e.target.value)} placeholder="Nome"
+                  style={{ ...inputStyle, width: 90, padding: "8px 10px" }} />
                 <input value={commentText} onChange={e => setCommentText(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && postComment()}
-                  placeholder="Comentar..."
-                  style={{ flex: 1, padding: "8px 12px", borderRadius: 8, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(201,169,110,0.2)", color: text, fontSize: 13, fontFamily: "Georgia, serif" }} />
-                <button onClick={postComment} style={{ ...btnStyle(), padding: "8px 16px", fontSize: 13 }}>Enviar</button>
+                  placeholder="Comentar..." style={{ ...inputStyle, flex: 1, padding: "8px 12px" }} />
+                <button onClick={postComment} style={{ ...btnStyle(), padding: "8px 14px", fontSize: 14 }}>→</button>
               </div>
             </div>
           </div>
         )}
 
-        {/* ── CONTROLE ── */}
-        {tab === "controle" && (
+        {/* ── CONTROLE (admin only) ── */}
+        {tab === "controle" && isAdmin && (
           <div>
-            {matchState === "idle" && (
+            {match.matchState === "idle" && (
               <div style={{ background: card, border: `1px solid rgba(201,169,110,0.2)`, borderRadius: 20, padding: 24, marginBottom: 20 }}>
-                <div style={{ color: gold, fontWeight: 700, marginBottom: 16, fontSize: 14, letterSpacing: 1 }}>CHECK-IN DA PARTIDA</div>
-                <input value={tournament} onChange={e => setTournament(e.target.value)}
-                  placeholder="Nome do torneio / evento"
-                  style={{ width: "100%", padding: "12px 16px", borderRadius: 10, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(201,169,110,0.2)", color: text, fontSize: 14, marginBottom: 12, boxSizing: "border-box", fontFamily: "Georgia, serif" }} />
-                <select value={surface} onChange={e => setSurface(e.target.value)}
-                  style={{ width: "100%", padding: "12px 16px", borderRadius: 10, background: "#1a1a2e", border: "1px solid rgba(201,169,110,0.2)", color: text, fontSize: 14, marginBottom: 16, fontFamily: "Georgia, serif" }}>
+                <div style={{ color: gold, fontWeight: 700, marginBottom: 16, fontSize: 13, letterSpacing: 1 }}>CHECK-IN DA PARTIDA</div>
+                <input value={match.tournament} onChange={e => updateMatch(m => ({ ...m, tournament: e.target.value }))}
+                  placeholder="Nome do torneio / evento" style={{ ...inputStyle, marginBottom: 12 }} />
+                <select value={match.surface} onChange={e => updateMatch(m => ({ ...m, surface: e.target.value }))}
+                  style={{ ...inputStyle, marginBottom: 16, background: "#1a1a2e" }}>
                   {["Saibro", "Quadra dura", "Grama", "Carpete"].map(s => <option key={s}>{s}</option>)}
                 </select>
                 <button onClick={handleCheckin} disabled={loadingWeather}
                   style={{ ...btnStyle(purple), width: "100%", marginBottom: 12, opacity: loadingWeather ? 0.6 : 1 }}>
-                  {loadingWeather ? "Obtendo localização..." : "📍 Fazer Check-in (localização + clima)"}
+                  {loadingWeather ? "Obtendo localização..." : "📍 Check-in (localização + clima)"}
                 </button>
-                {weather && (
-                  <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: 12, fontSize: 13, color: gold, textAlign: "center" }}>
-                    {weatherIcon(weather.code)} {weather.temp}°C · 💨 {weather.wind} km/h · {location}
+                {match.weather && (
+                  <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: 12, fontSize: 13, color: gold, textAlign: "center", marginBottom: 12 }}>
+                    {weatherIcon(match.weather.code)} {match.weather.temp}°C · 💨 {match.weather.wind} km/h · {match.location}
                   </div>
                 )}
-                <button onClick={() => setMatchState("active")}
-                  style={{ ...btnStyle(), width: "100%", marginTop: 12, fontSize: 16, padding: "16px" }}>
+                <button onClick={() => updateMatch(m => ({ ...m, matchState: "active" }))}
+                  style={{ ...btnStyle(), width: "100%", fontSize: 16, padding: 18 }}>
                   🎾 Iniciar Partida
                 </button>
               </div>
             )}
 
-            {matchState === "active" && !rally && (
+            {match.matchState === "active" && !rally && (
               <div>
-                <div style={{ color: gold, fontWeight: 700, marginBottom: 16, fontSize: 14, letterSpacing: 1, textAlign: "center" }}>
-                  QUEM FEZ O PONTO?
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
-                  {[{ key: "p1", name: p1Name, photo: p1Photo }, { key: "p2", name: p2Name, photo: p2Photo }].map(p => (
+                <div style={{ color: gold, fontWeight: 700, marginBottom: 16, fontSize: 14, letterSpacing: 1, textAlign: "center" }}>QUEM FEZ O PONTO?</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 20 }}>
+                  {[
+                    { key: "p1", name: match.p1Name, photo: match.p1Photo },
+                    { key: "p2", name: match.p2Name, photo: match.p2Photo }
+                  ].map(p => (
                     <button key={p.key} onClick={() => handlePoint(p.key)} style={{
                       background: "rgba(255,255,255,0.04)", border: `2px solid rgba(201,169,110,0.3)`,
-                      borderRadius: 16, padding: 20, cursor: "pointer", display: "flex",
-                      flexDirection: "column", alignItems: "center", gap: 10,
+                      borderRadius: 18, padding: 20, cursor: "pointer",
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
                       transition: "all .2s", color: text
-                    }}
-                      onMouseEnter={e => e.currentTarget.style.border = `2px solid ${gold}`}
-                      onMouseLeave={e => e.currentTarget.style.border = `2px solid rgba(201,169,110,0.3)`}
-                    >
-                      <Avatar src={p.photo} name={p.name} size={60} />
+                    }}>
+                      <Avatar src={p.photo} name={p.name} size={58} />
                       <span style={{ fontWeight: 700, fontSize: 15 }}>{p.name}</span>
-                      <div style={{ fontSize: 22, fontWeight: 900, color: gold }}>{pt(score[p.key + "Points"])}</div>
+                      <div style={{ fontSize: 24, fontWeight: 900, color: gold }}>{pt(match.score[p.key + "Points"])}</div>
                     </button>
                   ))}
                 </div>
-                <div style={{ textAlign: "center", background: card, borderRadius: 12, padding: 12, fontSize: 13, color: muted }}>
-                  Sets: {score.p1Sets}–{score.p2Sets} · Games: {score.p1Games}–{score.p2Games}
+                <div style={{ textAlign: "center", background: card, borderRadius: 12, padding: 12, fontSize: 13, color: muted, marginBottom: 16 }}>
+                  Sets: {match.score.p1Sets}–{match.score.p2Sets} · Games: {match.score.p1Games}–{match.score.p2Games}
                 </div>
-                <button onClick={resetMatch} style={{ ...btnStyle("#e05050"), width: "100%", marginTop: 16, fontSize: 14 }}>
+                <button onClick={resetMatch} style={{ ...btnStyle("#e05050"), width: "100%", fontSize: 13 }}>
                   🔄 Resetar Partida
                 </button>
               </div>
             )}
 
-            {matchState === "active" && rally && (
+            {match.matchState === "active" && rally && (
               <div>
-                <div style={{ color: gold, fontWeight: 700, marginBottom: 8, fontSize: 14, letterSpacing: 1, textAlign: "center" }}>
-                  COMO FOI O PONTO?
-                </div>
+                <div style={{ color: gold, fontWeight: 700, marginBottom: 6, fontSize: 14, letterSpacing: 1, textAlign: "center" }}>COMO FOI O PONTO?</div>
                 <div style={{ color: muted, fontSize: 13, textAlign: "center", marginBottom: 20 }}>
-                  Ponto para: <strong style={{ color: text }}>{rally.winner === "p1" ? p1Name : p2Name}</strong>
+                  Ponto para: <strong style={{ color: text }}>{rally.winner === "p1" ? match.p1Name : match.p2Name}</strong>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                   {[
                     { key: "ace", label: "🎯 ACE", desc: "Serviço não tocado", color: "#4ade80" },
                     { key: "winner", label: "⚡ Winner", desc: "Bola vencedora", color: goldLight },
                     { key: "point", label: "✅ Ponto", desc: "Rali normal", color: purple },
-                    { key: "unforced", label: "❌ Erro NF", desc: "Erro não forçado (adversária)", color: "#e05050" },
+                    { key: "unforced", label: "❌ Erro NF", desc: "Erro não forçado", color: "#e05050" },
                   ].map(s => (
                     <button key={s.key} onClick={() => handleShot(s.key)} style={{
                       background: "rgba(255,255,255,0.04)", border: `2px solid ${s.color}44`,
                       borderRadius: 16, padding: "18px 12px", cursor: "pointer",
                       display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
                       transition: "all .2s", color: text
-                    }}
-                      onMouseEnter={e => e.currentTarget.style.background = `${s.color}18`}
-                      onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
-                    >
+                    }}>
                       <span style={{ fontSize: 22 }}>{s.label.split(" ")[0]}</span>
                       <span style={{ fontWeight: 700, color: s.color, fontSize: 14 }}>{s.label.split(" ").slice(1).join(" ")}</span>
                       <span style={{ fontSize: 11, color: muted }}>{s.desc}</span>
                     </button>
                   ))}
                 </div>
-                <button onClick={() => setRally(null)} style={{ ...btnStyle(muted), width: "100%", marginTop: 16, fontSize: 13, background: "rgba(255,255,255,0.06)", color: muted, boxShadow: "none" }}>
+                <button onClick={() => setRally(null)} style={{ ...btnStyle(muted), width: "100%", marginTop: 14, fontSize: 13, background: "rgba(255,255,255,0.06)", color: muted, boxShadow: "none" }}>
                   ← Cancelar
                 </button>
               </div>
@@ -532,39 +575,35 @@ export default function TennisApp() {
           <div>
             <div style={{ background: card, border: `1px solid rgba(201,169,110,0.2)`, borderRadius: 20, padding: 24, marginBottom: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
-                <div style={{ textAlign: "center" }}>
-                  <Avatar src={p1Photo} name={p1Name} size={44} />
-                  <div style={{ fontSize: 12, marginTop: 6, fontWeight: 700 }}>{p1Name}</div>
-                </div>
+                {[{ key: "p1", name: match.p1Name, photo: match.p1Photo }, { key: "p2", name: match.p2Name, photo: match.p2Photo }].map((p, i) => (
+                  <div key={p.key} style={{ textAlign: i === 1 ? "right" : "left", display: "flex", flexDirection: "column", alignItems: i === 1 ? "flex-end" : "flex-start", gap: 6 }}>
+                    <Avatar src={p.photo} name={p.name} size={44} />
+                    <div style={{ fontSize: 12, fontWeight: 700 }}>{p.name}</div>
+                  </div>
+                ))}
                 <div style={{ textAlign: "center", alignSelf: "center" }}>
-                  <div style={{ color: muted, fontSize: 11, marginBottom: 4 }}>PLACAR</div>
-                  <div style={{ fontSize: 20, fontWeight: 900, color: gold }}>{score.p1Sets} – {score.p2Sets}</div>
-                </div>
-                <div style={{ textAlign: "center" }}>
-                  <Avatar src={p2Photo} name={p2Name} size={44} />
-                  <div style={{ fontSize: 12, marginTop: 6, fontWeight: 700 }}>{p2Name}</div>
+                  <div style={{ color: muted, fontSize: 10, marginBottom: 4 }}>PLACAR</div>
+                  <div style={{ fontSize: 22, fontWeight: 900, color: gold }}>{match.score.p1Sets} – {match.score.p2Sets}</div>
                 </div>
               </div>
-              <StatBar label="Aces" v1={stats.p1.aces} v2={stats.p2.aces} />
-              <StatBar label="Winners" v1={stats.p1.winners} v2={stats.p2.winners} />
-              <StatBar label="Erros NF" v1={stats.p1.unforced} v2={stats.p2.unforced} />
-              <StatBar label="Pontos" v1={stats.p1.points} v2={stats.p2.points} />
+              <StatBar label="Aces" v1={match.stats.p1.aces} v2={match.stats.p2.aces} />
+              <StatBar label="Winners" v1={match.stats.p1.winners} v2={match.stats.p2.winners} />
+              <StatBar label="Erros NF" v1={match.stats.p1.unforced} v2={match.stats.p2.unforced} />
+              <StatBar label="Pontos" v1={match.stats.p1.points} v2={match.stats.p2.points} />
             </div>
-
-            {/* per set */}
-            {score.sets.length > 0 && (
+            {match.score.sets.length > 0 && (
               <div style={{ background: card, border: `1px solid rgba(201,169,110,0.1)`, borderRadius: 16, padding: 16 }}>
-                <div style={{ color: gold, fontWeight: 700, marginBottom: 12, fontSize: 13, letterSpacing: 1 }}>SETS DISPUTADOS</div>
+                <div style={{ color: gold, fontWeight: 700, marginBottom: 12, fontSize: 12, letterSpacing: 1 }}>SETS DISPUTADOS</div>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
                   <thead>
                     <tr style={{ color: muted, fontSize: 11 }}>
                       <td style={{ padding: "6px 0" }}>SET</td>
-                      <td style={{ textAlign: "center" }}>{p1Name.split(" ")[0]}</td>
-                      <td style={{ textAlign: "center" }}>{p2Name.split(" ")[0]}</td>
+                      <td style={{ textAlign: "center" }}>{match.p1Name.split(" ")[0]}</td>
+                      <td style={{ textAlign: "center" }}>{match.p2Name.split(" ")[0]}</td>
                     </tr>
                   </thead>
                   <tbody>
-                    {score.sets.map((s, i) => (
+                    {match.score.sets.map((s, i) => (
                       <tr key={i} style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
                         <td style={{ padding: "8px 0", color: muted }}>Set {i + 1}</td>
                         <td style={{ textAlign: "center", fontWeight: s.p1 > s.p2 ? 800 : 400, color: s.p1 > s.p2 ? gold : text }}>{s.p1}</td>
@@ -582,47 +621,46 @@ export default function TennisApp() {
         {tab === "torcida" && (
           <div>
             <div style={{ background: card, border: `1px solid rgba(201,169,110,0.2)`, borderRadius: 20, padding: 20, marginBottom: 16 }}>
-              <button onClick={() => setLikes(l => l + 1)} style={{ ...btnStyle(), width: "100%", fontSize: 18, padding: 20 }}>
-                ❤️ Torcer! ({likes})
+              <button onClick={addLike} style={{ ...btnStyle(), width: "100%", fontSize: 20, padding: 22 }}>
+                ❤️ Torcer! ({match.likes || 0})
               </button>
             </div>
             <div style={{ background: card, border: `1px solid rgba(201,169,110,0.1)`, borderRadius: 16, padding: 16 }}>
-              <div style={{ color: gold, fontWeight: 700, marginBottom: 12, fontSize: 13, letterSpacing: 1 }}>COMENTÁRIOS</div>
-              <div style={{ maxHeight: 320, overflowY: "auto", marginBottom: 16 }}>
+              <div style={{ color: gold, fontWeight: 700, marginBottom: 12, fontSize: 12, letterSpacing: 1 }}>COMENTÁRIOS AO VIVO</div>
+              <div style={{ maxHeight: 340, overflowY: "auto", marginBottom: 14 }}>
                 {comments.length === 0
                   ? <div style={{ color: muted, fontSize: 13, textAlign: "center", padding: "24px 0" }}>Nenhum comentário ainda. Seja o primeiro! 🎾</div>
                   : comments.map(c => (
                     <div key={c.id} style={{ padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                      <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+                      <div style={{ display: "flex", gap: 8 }}>
                         <span style={{ color: gold, fontWeight: 700, fontSize: 13 }}>{c.name}</span>
-                        <span style={{ color: muted, fontSize: 10 }}>{c.time}</span>
+                        <span style={{ color: muted, fontSize: 10 }}>{new Date(c.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
                       </div>
-                      <div style={{ fontSize: 14, marginTop: 3 }}>{c.text}</div>
+                      <div style={{ fontSize: 14, marginTop: 2 }}>{c.text}</div>
                     </div>
                   ))
                 }
                 <div ref={commentsEndRef} />
               </div>
-              <input value={commentName} onChange={e => setCommentName(e.target.value)}
-                placeholder="Seu nome"
-                style={{ width: "100%", padding: "10px 14px", borderRadius: 8, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(201,169,110,0.2)", color: text, fontSize: 14, marginBottom: 8, boxSizing: "border-box", fontFamily: "Georgia, serif" }} />
+              <input value={commentName} onChange={e => setCommentName(e.target.value)} placeholder="Seu nome"
+                style={{ ...inputStyle, marginBottom: 8 }} />
               <div style={{ display: "flex", gap: 8 }}>
                 <input value={commentText} onChange={e => setCommentText(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && postComment()}
                   placeholder="Escreva um comentário..."
-                  style={{ flex: 1, padding: "10px 14px", borderRadius: 8, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(201,169,110,0.2)", color: text, fontSize: 14, fontFamily: "Georgia, serif" }} />
+                  style={{ ...inputStyle, flex: 1, padding: "10px 14px" }} />
                 <button onClick={postComment} style={{ ...btnStyle(), padding: "10px 18px" }}>→</button>
               </div>
             </div>
           </div>
         )}
 
-        {/* ── PERFIS ── */}
-        {tab === "perfis" && (
+        {/* ── PERFIS (admin only) ── */}
+        {tab === "perfis" && isAdmin && (
           <div>
             {[
-              { key: "p1", name: p1Name, setName: setP1Name, photo: p1Photo, ref: p1PhotoRef, player: "p1" },
-              { key: "p2", name: p2Name, setName: setP2Name, photo: p2Photo, ref: p2PhotoRef, player: "p2" },
+              { key: "p1", name: match.p1Name, photo: match.p1Photo, ref: p1PhotoRef },
+              { key: "p2", name: match.p2Name, photo: match.p2Photo, ref: p2PhotoRef },
             ].map((p, i) => (
               <div key={p.key} style={{ background: card, border: `1px solid rgba(201,169,110,0.2)`, borderRadius: 20, padding: 24, marginBottom: 16 }}>
                 <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 16 }}>
@@ -631,25 +669,26 @@ export default function TennisApp() {
                     <div style={{ position: "absolute", bottom: 0, right: 0, width: 22, height: 22, borderRadius: "50%", background: gold, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>📷</div>
                   </div>
                   <div style={{ flex: 1 }}>
-                    <input value={p.name} onChange={e => p.setName(e.target.value)}
+                    <input value={p.name}
+                      onChange={e => { const v = e.target.value; updateMatch(m => ({ ...m, [p.key + "Name"]: v })); }}
                       style={{ width: "100%", background: "transparent", border: "none", borderBottom: `1px solid rgba(201,169,110,0.3)`, color: text, fontSize: 18, fontWeight: 700, padding: "4px 0", fontFamily: "Georgia, serif", outline: "none", boxSizing: "border-box" }} />
                     <div style={{ color: muted, fontSize: 12, marginTop: 4 }}>{i === 0 ? "Jogadora principal" : "Adversária"}</div>
                   </div>
                   <input ref={p.ref} type="file" accept="image/*" style={{ display: "none" }}
-                    onChange={e => handlePhotoUpload(p.player, e)} />
+                    onChange={e => handlePhotoUpload(p.key, e)} />
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                   {[
-                    { label: "Sets", v: score[p.key + "Sets"] },
-                    { label: "Games", v: score[p.key + "Games"] },
-                    { label: "Aces", v: stats[p.key].aces },
-                    { label: "Winners", v: stats[p.key].winners },
-                    { label: "Pontos", v: stats[p.key].points },
-                    { label: "Erros NF", v: stats[p.key].unforced },
-                  ].map(stat => (
-                    <div key={stat.label} style={{ background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: "10px 14px" }}>
-                      <div style={{ color: muted, fontSize: 10, letterSpacing: 1 }}>{stat.label.toUpperCase()}</div>
-                      <div style={{ fontSize: 22, fontWeight: 800, color: gold }}>{stat.v}</div>
+                    { label: "Sets", v: match.score[p.key + "Sets"] },
+                    { label: "Games", v: match.score[p.key + "Games"] },
+                    { label: "Aces", v: match.stats[p.key].aces },
+                    { label: "Winners", v: match.stats[p.key].winners },
+                    { label: "Pontos", v: match.stats[p.key].points },
+                    { label: "Erros NF", v: match.stats[p.key].unforced },
+                  ].map(s => (
+                    <div key={s.label} style={{ background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: "10px 14px" }}>
+                      <div style={{ color: muted, fontSize: 10, letterSpacing: 1 }}>{s.label.toUpperCase()}</div>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: gold }}>{s.v}</div>
                     </div>
                   ))}
                 </div>
@@ -663,11 +702,9 @@ export default function TennisApp() {
       </div>
 
       <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.5; transform: scale(1.2); }
-        }
+        @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.2)} }
         input::placeholder { color: rgba(139,115,85,0.6); }
+        select option { background: #1a1a2e; }
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(201,169,110,0.3); border-radius: 2px; }
