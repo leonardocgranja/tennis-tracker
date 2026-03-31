@@ -769,8 +769,14 @@ export default function TennisApp() {
                     📅 Próxima partida: {new Date(match.nextMatchScheduled.date + "T" + match.nextMatchScheduled.time).toLocaleString("pt-BR", { weekday:"long", day:"numeric", month:"long", hour:"2-digit", minute:"2-digit" })}
                   </div>
                 )}
-                <button onClick={() => setFinishModal(true)} style={{ ...btnStyle(purple), width:"100%", marginBottom:10, fontSize:13 }}>📅 Agendar próxima partida</button>
-                <button onClick={resetMatch} style={{ ...btnStyle("#e05050"), width:"100%", fontSize:13 }}>🔄 Nova Partida</button>
+                <button onClick={() => setFinishModal(true)} style={{ ...btnStyle(purple), width:"100%", marginBottom:10, fontSize:13 }}>
+                  {match.nextMatchScheduled ? "🗓️ Mudar horário da próxima partida" : "📅 Agendar próxima partida"}
+                </button>
+                <button onClick={resetMatch} style={{ ...btnStyle("#4ade80"), width:"100%", fontSize:13, color:"#0d0d1a" }}>
+                  {match.score.matchWinner === "p1" && nextRound(match.round)
+                    ? `🎾 Check-in da ${nextRound(match.round)}`
+                    : "🎾 Nova Partida"}
+                </button>
               </div>
             )}
           </div>
