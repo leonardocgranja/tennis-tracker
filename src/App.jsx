@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
+import Onboarding from "./Onboarding.jsx";
 
 const SUPABASE_URL = "https://jokntxttmillstkpyoaq.supabase.co";
 const SUPABASE_KEY = "sb_publishable_nRuJ-FVLvkjyk0tJMwOLTg_VztF_9sg";
@@ -182,6 +183,16 @@ function Toast({ message, onDone }) {
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function TennisApp() {
   const urlMatchId = getMatchIdFromURL();
+  // ── Onboarding ──────────────────────────────────────────────────────────
+  const savedProfile = (() => { try { return JSON.parse(localStorage.getItem("tennis-profile") || "null"); } catch { return null; } })();
+  const [onboardingDone, setOnboardingDone] = useState(!!savedProfile || !!getMatchIdFromURL());
+  const [profile, setProfile] = useState(savedProfile || { adminName: "", gender: "f", athleteName: "Maria Amélia" });
+  function handleOnboardingComplete(data) {
+    setProfile(data);
+    localStorage.setItem("tennis-profile", JSON.stringify(data));
+    setOnboardingDone(true);
+  }
+
   const [mode, setMode] = useState(urlMatchId ? "viewer" : "choose");
   const [matchId, setMatchId] = useState(urlMatchId || null);
   const [adminInput, setAdminInput] = useState("");
@@ -279,7 +290,7 @@ export default function TennisApp() {
     if (adminInput === ADMIN_PASSWORD) {
       const newId = "match-" + Date.now();
       setMatchId(newId);
-      setMatch(emptyMatch(newId));
+      const m = emptyMatch(newId); m.p1Name = profile.athleteName || "Maria Amélia"; setMatch(m);
       setMode("admin");
       setAdminError(false);
       setTab("controle");
@@ -408,6 +419,9 @@ export default function TennisApp() {
   const shareURL = matchId ? buildShareURL(matchId) : "";
 
   // ─── SCREEN: CHOOSE ──────────────────────────────────────────────────────
+  // ── Show onboarding for first-time users ──
+  if (!onboardingDone) return <Onboarding onComplete={handleOnboardingComplete} />;
+
   if (mode === "choose") {
     return (
       <div style={{ minHeight:"100vh", background:bg, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:24, backgroundImage:"radial-gradient(ellipse at 20% 20%, rgba(124,111,158,0.15) 0%, transparent 60%)", fontFamily:"Georgia, serif", color:text }}>
