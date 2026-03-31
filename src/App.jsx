@@ -659,7 +659,24 @@ export default function TennisApp() {
               </>
             )}
 
-            <button onClick={() => { setShowCorrection(false); setToast("Placar atualizado! ✓"); }} style={{ width:"100%", padding:"14px", background:"linear-gradient(135deg,#f59e0b,#d97706)", border:"none", borderRadius:12, color:"#0d0d1a", fontWeight:800, fontSize:15, cursor:"pointer", fontFamily:"Georgia, serif" }}>
+            <button onClick={() => {
+              // If sets are 1-1 and not already in super tiebreak, activate it
+              updateMatch(m => {
+                const s = { ...m.score };
+                if (s.p1Sets === 1 && s.p2Sets === 1 && !s.inSuperTiebreak) {
+                  s.inSuperTiebreak = true;
+                  s.p1Points = s.p1Points || 0;
+                  s.p2Points = s.p2Points || 0;
+                }
+                // If sets are NOT 1-1, make sure superTiebreak is off
+                if (!(s.p1Sets === 1 && s.p2Sets === 1)) {
+                  s.inSuperTiebreak = false;
+                }
+                return { ...m, score: s };
+              });
+              setShowCorrection(false);
+              setToast("Placar atualizado! ✓");
+            }} style={{ width:"100%", padding:"14px", background:"linear-gradient(135deg,#f59e0b,#d97706)", border:"none", borderRadius:12, color:"#0d0d1a", fontWeight:800, fontSize:15, cursor:"pointer", fontFamily:"Georgia, serif" }}>
               ✓ Confirmar Correção
             </button>
           </div>
