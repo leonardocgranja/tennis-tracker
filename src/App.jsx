@@ -265,7 +265,11 @@ export default function TennisApp() {
       updateMatch(m => ({ ...m, matchState: "finished" }));
       setLastTournament({ tournament: match.tournament, round: match.round, won: match.score.matchWinner === "p1" });
       setTournamentHistory(prev => [...prev.filter(m => m.id !== match.id), { ...match }]);
-      setTimeout(() => setFinishModal(true), 800);
+      // Only show scheduling modal if there is a next round (not Final)
+      const isFinal = match.round === "Final";
+      if (!isFinal) {
+        setTimeout(() => setFinishModal(true), 800);
+      }
     }
   }, [match.score.matchOver]);
 
@@ -807,9 +811,11 @@ export default function TennisApp() {
                 <button onClick={() => setShowRetrospectiva(true)} style={{ ...btnStyle(gold), width:"100%", marginBottom:10, fontSize:13 }}>
                   ✨ {match.retro ? "Visualizar Retrospectiva" : "Gerar Retrospectiva"}
                 </button>
-                <button onClick={() => setFinishModal(true)} style={{ ...btnStyle(purple), width:"100%", marginBottom:10, fontSize:13 }}>
-                  {match.nextMatchScheduled ? "🗓️ Mudar horário da próxima partida" : "📅 Agendar próxima partida"}
-                </button>
+                {match.round !== "Final" && (
+                  <button onClick={() => setFinishModal(true)} style={{ ...btnStyle(purple), width:"100%", marginBottom:10, fontSize:13 }}>
+                    {match.nextMatchScheduled ? "🗓️ Mudar horário da próxima partida" : "📅 Agendar próxima partida"}
+                  </button>
+                )}
                 <button onClick={resetMatch} style={{ ...btnStyle("#4ade80"), width:"100%", fontSize:13, color:"#0d0d1a" }}>
                   {match.score.matchWinner === "p1" && nextRound(match.round)
                     ? `🎾 Check-in da ${nextRound(match.round)}`
