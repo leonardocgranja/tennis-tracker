@@ -58,27 +58,18 @@ export default function Retrospectiva({ match, tournamentHistory, scenario, athl
     setError(null);
     try {
       const prompt = buildPrompt(scenario, match, tournamentHistory, athleteName, gender);
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      const response = await fetch("/api/retrospectiva", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": "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",
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          messages: [{ role: "user", content: prompt }],
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
       });
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
-        throw new Error(err.error?.message || "API error " + response.status);
+        throw new Error(err.error || "Erro no servidor");
       }
       const data = await response.json();
-      const generated = data.content?.map(b => b.text || "").join("") || "";
-      if (!generated) throw new Error("vazio");
+      const generated = data.text || "";
+      if (!generated) throw new Error("Resposta vazia");
       setRetText(generated);
       setPhase("done");
     } catch (e) {
