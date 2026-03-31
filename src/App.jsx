@@ -282,27 +282,29 @@ export default function TennisApp() {
     }
   }, [match.score.matchOver, match.matchState]);
 
-  // Match point notification in comments
+  // Match point notification — with guard to avoid duplicate posts
+  const matchPointPosted = useRef(false);
+
   useEffect(() => {
     if (!isAdmin || match.matchState !== "active" || !matchId) return;
     const s = match.score;
-    const isSuperTB = s.inSuperTiebreak;
 
-    // Detect match point: player needs one more point to win
     let mpPlayer = null;
-    if (isSuperTB) {
-      // Super TB: match point when player has >= 9 and leads by at least 1
+
+    if (s.inSuperTiebreak) {
+      // Super TB match point: needs 9+ pts AND leads by 1+
       if (s.p1Points >= 9 && s.p1Points > s.p2Points) mpPlayer = "p1";
       else if (s.p2Points >= 9 && s.p2Points > s.p1Points) mpPlayer = "p2";
     } else {
-      // Normal: match point when player has set point AND is 1 set ahead
-      const p1MatchPoint = s.p1Sets === 1 && s.p1Games >= 5 && s.p1Games > s.p2Games && s.p1Points === 3 && s.p2Points < 3;
-      const p2MatchPoint = s.p2Sets === 1 && s.p2Games >= 5 && s.p2Games > s.p1Games && s.p2Points === 3 && s.p1Points < 3;
-      if (p1MatchPoint) mpPlayer = "p1";
-      else if (p2MatchPoint) mpPlayer = "p2";
+      // Normal game match point: leading set 1-0, serving for match (game 40, opponent < 40)
+      const p1mp = s.p1Sets === 1 && s.p2Sets === 0 && s.p1Games >= 5 && s.p1Games > s.p2Games && s.p1Points === 3 && s.p2Points < 3;
+      const p2mp = s.p2Sets === 1 && s.p1Sets === 0 && s.p2Games >= 5 && s.p2Games > s.p1Games && s.p2Points === 3 && s.p1Points < 3;
+      if (p1mp) mpPlayer = "p1";
+      else if (p2mp) mpPlayer = "p2";
     }
 
-    if (mpPlayer) {
+    if (mpPlayer && !matchPointPosted.current) {
+      matchPointPosted.current = true;
       const name = mpPlayer === "p1" ? match.p1Name : match.p2Name;
       supabase.from("comments").insert({
         match_id: matchId,
@@ -310,7 +312,17 @@ export default function TennisApp() {
         text: `⚡ MATCH POINT para ${name}! O próximo ponto pode encerrar a partida!`,
       });
     }
-  }, [match.score.p1Points, match.score.p2Points, match.score.p1Games, match.score.p2Games]);
+
+    // Reset guard when no longer match point (e.g. point lost)
+    if (!mpPlayer) {
+      matchPointPosted.current = false;
+    }
+  }, [
+    match.score.p1Points, match.score.p2Points,
+    match.score.p1Games, match.score.p2Games,
+    match.score.p1Sets, match.score.p2Sets,
+    match.score.inSuperTiebreak
+  ]);
 
   async function loadMatch(mId) {
     const { data } = await supabase.from("matches").select("data").eq("id", mId).single();
