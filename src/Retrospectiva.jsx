@@ -62,6 +62,7 @@ export default function Retrospectiva({ match, tournamentHistory, scenario, athl
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "x-api-key": "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",
           "anthropic-version": "2023-06-01",
           "anthropic-dangerous-direct-browser-access": "true",
         },
