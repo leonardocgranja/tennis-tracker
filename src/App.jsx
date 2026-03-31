@@ -568,11 +568,6 @@ export default function TennisApp() {
           </div>
           <div style={{ display:"flex", gap:5, flexWrap:"wrap", alignItems:"center" }}>
             {tabs.map(t => <button key={t} style={tabStyle(t)} onClick={() => setTab(t)}>{t.charAt(0).toUpperCase()+t.slice(1)}</button>)}
-            {isAdmin && match.matchState === "active" && (
-              <button onClick={() => setShareModal(true)} style={{ marginLeft:"auto", padding:"8px 14px", background:"linear-gradient(135deg,#4ade80,#22c55e)", border:"none", borderRadius:8, color:"#0d0d1a", fontWeight:800, fontSize:12, cursor:"pointer", fontFamily:"Georgia, serif" }}>
-                📤 Compartilhar
-              </button>
-            )}
             {!isAdmin && <button onClick={() => setMode("choose")} style={{ marginLeft:"auto", padding:"8px 12px", background:"transparent", border:"none", color:muted, cursor:"pointer", fontSize:12 }}>← Sair</button>}
           </div>
         </div>
