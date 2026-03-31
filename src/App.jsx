@@ -272,17 +272,45 @@ export default function TennisApp() {
       updateMatch(m => ({ ...m, matchState: "finished" }));
       setLastTournament({ tournament: match.tournament, round: match.round, won: match.score.matchWinner === "p1" });
       setTournamentHistory(prev => [...prev.filter(m => m.id !== match.id), { ...match }]);
-      // Only show scheduling modal if there is a next round (not Final)
       const isFinal = match.round === "Final";
       if (!isFinal) {
         setTimeout(() => setFinishModal(true), 800);
       }
     }
-    // Reset guard when a new match starts
     if (match.matchState === "idle") {
       matchOverHandled.current = false;
     }
   }, [match.score.matchOver, match.matchState]);
+
+  // Match point notification in comments
+  useEffect(() => {
+    if (!isAdmin || match.matchState !== "active" || !matchId) return;
+    const s = match.score;
+    const isSuperTB = s.inSuperTiebreak;
+
+    // Detect match point: player needs one more point to win
+    let mpPlayer = null;
+    if (isSuperTB) {
+      // Super TB: match point when player has >= 9 and leads by at least 1
+      if (s.p1Points >= 9 && s.p1Points > s.p2Points) mpPlayer = "p1";
+      else if (s.p2Points >= 9 && s.p2Points > s.p1Points) mpPlayer = "p2";
+    } else {
+      // Normal: match point when player has set point AND is 1 set ahead
+      const p1MatchPoint = s.p1Sets === 1 && s.p1Games >= 5 && s.p1Games > s.p2Games && s.p1Points === 3 && s.p2Points < 3;
+      const p2MatchPoint = s.p2Sets === 1 && s.p2Games >= 5 && s.p2Games > s.p1Games && s.p2Points === 3 && s.p1Points < 3;
+      if (p1MatchPoint) mpPlayer = "p1";
+      else if (p2MatchPoint) mpPlayer = "p2";
+    }
+
+    if (mpPlayer) {
+      const name = mpPlayer === "p1" ? match.p1Name : match.p2Name;
+      supabase.from("comments").insert({
+        match_id: matchId,
+        name: "🎾 Match Point",
+        text: `⚡ MATCH POINT para ${name}! O próximo ponto pode encerrar a partida!`,
+      });
+    }
+  }, [match.score.p1Points, match.score.p2Points, match.score.p1Games, match.score.p2Games]);
 
   async function loadMatch(mId) {
     const { data } = await supabase.from("matches").select("data").eq("id", mId).single();
@@ -671,18 +699,22 @@ export default function TennisApp() {
             )}
 
             <button onClick={() => {
+              // Reset match-over guard so the corrected state can trigger end properly
+              matchOverHandled.current = false;
               updateMatch(m => {
                 const s = { ...m.score };
                 if (s.p1Sets === 1 && s.p2Sets === 1) {
-                  // Activate super tiebreak — zero games, keep points as-is
                   s.inSuperTiebreak = true;
+                  s.matchOver = false;
+                  s.matchWinner = null;
                   s.p1Games = 0;
                   s.p2Games = 0;
                   s.p1Points = s.p1Points || 0;
                   s.p2Points = s.p2Points || 0;
                 } else {
-                  // Not 1-1 — normal set, disable super tiebreak
                   s.inSuperTiebreak = false;
+                  s.matchOver = false;
+                  s.matchWinner = null;
                   s.p1Points = 0;
                   s.p2Points = 0;
                 }
