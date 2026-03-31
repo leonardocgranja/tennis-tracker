@@ -613,23 +613,27 @@ export default function TennisApp() {
               ))}
             </div>
 
-            {/* Games */}
-            <div style={{ color:gold, fontSize:11, fontWeight:700, letterSpacing:1, marginBottom:8 }}>GAMES (SET ATUAL)</div>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
-              {["p1","p2"].map(p => (
-                <div key={p}>
-                  <div style={{ color:muted, fontSize:11, marginBottom:4 }}>{p==="p1" ? match.p1Name : match.p2Name}</div>
-                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                    <button onClick={() => updateMatch(m => ({ ...m, score: { ...m.score, [p+"Games"]: Math.max(0, m.score[p+"Games"]-1) } }))} style={{ width:32, height:32, borderRadius:8, background:"rgba(255,255,255,0.08)", border:"none", color:text, fontSize:18, cursor:"pointer" }}>−</button>
-                    <div style={{ fontSize:24, fontWeight:900, color:gold, minWidth:24, textAlign:"center" }}>{match.score[p+"Games"]}</div>
-                    <button onClick={() => updateMatch(m => ({ ...m, score: { ...m.score, [p+"Games"]: Math.min(7, m.score[p+"Games"]+1) } }))} style={{ width:32, height:32, borderRadius:8, background:"rgba(255,255,255,0.08)", border:"none", color:text, fontSize:18, cursor:"pointer" }}>+</button>
-                  </div>
+            {/* Games — only show when NOT in super tiebreak */}
+            {!(match.score.p1Sets === 1 && match.score.p2Sets === 1) && (
+              <>
+                <div style={{ color:gold, fontSize:11, fontWeight:700, letterSpacing:1, marginBottom:8 }}>GAMES (SET ATUAL)</div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
+                  {["p1","p2"].map(p => (
+                    <div key={p}>
+                      <div style={{ color:muted, fontSize:11, marginBottom:4 }}>{p==="p1" ? match.p1Name : match.p2Name}</div>
+                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        <button onClick={() => updateMatch(m => ({ ...m, score: { ...m.score, [p+"Games"]: Math.max(0, m.score[p+"Games"]-1) } }))} style={{ width:32, height:32, borderRadius:8, background:"rgba(255,255,255,0.08)", border:"none", color:text, fontSize:18, cursor:"pointer" }}>−</button>
+                        <div style={{ fontSize:24, fontWeight:900, color:gold, minWidth:24, textAlign:"center" }}>{match.score[p+"Games"]}</div>
+                        <button onClick={() => updateMatch(m => ({ ...m, score: { ...m.score, [p+"Games"]: Math.min(7, m.score[p+"Games"]+1) } }))} style={{ width:32, height:32, borderRadius:8, background:"rgba(255,255,255,0.08)", border:"none", color:text, fontSize:18, cursor:"pointer" }}>+</button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </>
+            )}
 
-            {/* Points */}
-            {!match.score.inSuperTiebreak ? (
+            {/* Points — normal game when not 1-1, super tiebreak when 1-1 */}
+            {!(match.score.p1Sets === 1 && match.score.p2Sets === 1) ? (
               <>
                 <div style={{ color:gold, fontSize:11, fontWeight:700, letterSpacing:1, marginBottom:8 }}>PONTOS (GAME ATUAL)</div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:20 }}>
@@ -646,15 +650,19 @@ export default function TennisApp() {
               </>
             ) : (
               <>
-                <div style={{ color:gold, fontSize:11, fontWeight:700, letterSpacing:1, marginBottom:8 }}>PONTOS (SUPER TIE-BREAK)</div>
+                <div style={{ background:"rgba(201,169,110,0.08)", border:"1px solid rgba(201,169,110,0.2)", borderRadius:10, padding:"10px 14px", marginBottom:12 }}>
+                  <div style={{ color:gold, fontWeight:700, fontSize:13 }}>🎯 Super Tie-Break ativo</div>
+                  <div style={{ color:muted, fontSize:11, marginTop:2 }}>Primeiro a 10 pontos com diferença de 2</div>
+                </div>
+                <div style={{ color:gold, fontSize:11, fontWeight:700, letterSpacing:1, marginBottom:8 }}>PONTOS DO SUPER TIE-BREAK</div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:20 }}>
                   {["p1","p2"].map(p => (
                     <div key={p}>
                       <div style={{ color:muted, fontSize:11, marginBottom:4 }}>{p==="p1" ? match.p1Name : match.p2Name}</div>
                       <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                        <button onClick={() => updateMatch(m => ({ ...m, score: { ...m.score, [p+"Points"]: Math.max(0, m.score[p+"Points"]-1) } }))} style={{ width:32, height:32, borderRadius:8, background:"rgba(255,255,255,0.08)", border:"none", color:text, fontSize:18, cursor:"pointer" }}>−</button>
-                        <div style={{ fontSize:24, fontWeight:900, color:gold, minWidth:28, textAlign:"center" }}>{match.score[p+"Points"]}</div>
-                        <button onClick={() => updateMatch(m => ({ ...m, score: { ...m.score, [p+"Points"]: m.score[p+"Points"]+1 } }))} style={{ width:32, height:32, borderRadius:8, background:"rgba(255,255,255,0.08)", border:"none", color:text, fontSize:18, cursor:"pointer" }}>+</button>
+                        <button onClick={() => updateMatch(m => ({ ...m, score: { ...m.score, [p+"Points"]: Math.max(0, m.score[p+"Points"]-1) } }))} style={{ width:36, height:36, borderRadius:8, background:"rgba(255,255,255,0.08)", border:"none", color:text, fontSize:20, cursor:"pointer" }}>−</button>
+                        <div style={{ fontSize:28, fontWeight:900, color:goldLight, minWidth:32, textAlign:"center" }}>{match.score[p+"Points"]}</div>
+                        <button onClick={() => updateMatch(m => ({ ...m, score: { ...m.score, [p+"Points"]: m.score[p+"Points"]+1 } }))} style={{ width:36, height:36, borderRadius:8, background:"rgba(255,255,255,0.08)", border:"none", color:text, fontSize:20, cursor:"pointer" }}>+</button>
                       </div>
                     </div>
                   ))}
@@ -663,17 +671,20 @@ export default function TennisApp() {
             )}
 
             <button onClick={() => {
-              // If sets are 1-1 and not already in super tiebreak, activate it
               updateMatch(m => {
                 const s = { ...m.score };
-                if (s.p1Sets === 1 && s.p2Sets === 1 && !s.inSuperTiebreak) {
+                if (s.p1Sets === 1 && s.p2Sets === 1) {
+                  // Activate super tiebreak — zero games, keep points as-is
                   s.inSuperTiebreak = true;
+                  s.p1Games = 0;
+                  s.p2Games = 0;
                   s.p1Points = s.p1Points || 0;
                   s.p2Points = s.p2Points || 0;
-                }
-                // If sets are NOT 1-1, make sure superTiebreak is off
-                if (!(s.p1Sets === 1 && s.p2Sets === 1)) {
+                } else {
+                  // Not 1-1 — normal set, disable super tiebreak
                   s.inSuperTiebreak = false;
+                  s.p1Points = 0;
+                  s.p2Points = 0;
                 }
                 return { ...m, score: s };
               });
