@@ -273,6 +273,20 @@ export default function TennisApp() {
     setMatch(finishedMatch);
     setLastTournament({ tournament: currentMatch.tournament, round: currentMatch.round, won: newScore.matchWinner === "p1" });
     setTournamentHistory(prev => [...prev.filter(m => m.id !== currentMatch.id), finishedMatch]);
+
+    // Post GAME SET MATCH announcement to timeline
+    if (matchId) {
+      const winner = newScore.matchWinner === "p1" ? currentMatch.p1Name : currentMatch.p2Name;
+      const sets = newScore.sets.map((s, i) =>
+        `${s.superTiebreak ? "Super TB" : "Set " + (i+1)}: ${s.p1}–${s.p2}`
+      ).join(" | ");
+      supabase.from("comments").insert({
+        match_id: matchId,
+        name: "🏆 GAME, SET, MATCH!",
+        text: `${winner} venceu a partida! ${sets}`,
+      });
+    }
+
     const isFinal = currentMatch.round === "Final";
     if (!isFinal) {
       setTimeout(() => setFinishModal(true), 800);
@@ -336,7 +350,7 @@ export default function TennisApp() {
   }
 
   async function loadComments(mId) {
-    const { data } = await supabase.from("comments").select("*").eq("match_id", mId).order("created_at", { ascending: true });
+    const { data } = await supabase.from("comments").select("*").eq("match_id", mId).order("created_at", { ascending: false });
     if (data) setComments(data);
   }
 
@@ -439,7 +453,7 @@ export default function TennisApp() {
   async function postComment() {
     if (!commentText.trim() || !matchId) return;
     const optimistic = { id: Date.now(), match_id: matchId, name: commentName.trim() || "Torcedor", text: commentText.trim(), created_at: new Date().toISOString() };
-    setComments(prev => [...prev, optimistic]);
+    setComments(prev => [optimistic, ...prev]);
     setCommentText("");
     await supabase.from("comments").insert({ match_id: matchId, name: optimistic.name, text: optimistic.text });
   }
@@ -841,10 +855,15 @@ export default function TennisApp() {
               {match.events.length === 0
                 ? <div style={{ color:muted, fontSize:13, textAlign:"center", padding:"16px 0" }}>Nenhum ponto registrado ainda</div>
                 : match.events.map((e, i) => (
-                  <div key={i} style={{ display:"flex", gap:10, padding:"7px 0", borderBottom: i < match.events.length-1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
-                    <span style={{ color:muted, fontSize:11, minWidth:38 }}>{e.time}</span>
-                    <span style={{ fontSize:13 }}>{e.text}</span>
-                  </div>
+                  e.celebration
+                    ? <div key={i} style={{ background:"linear-gradient(135deg,rgba(201,169,110,0.15),rgba(124,111,158,0.15))", border:"1px solid rgba(201,169,110,0.4)", borderRadius:10, padding:"10px 14px", margin:"6px 0", textAlign:"center" }}>
+                        <div style={{ color:"#e8c97a", fontWeight:900, fontSize:14, letterSpacing:0.5 }}>{e.text}</div>
+                        <div style={{ color:muted, fontSize:10, marginTop:2 }}>{e.time}</div>
+                      </div>
+                    : <div key={i} style={{ display:"flex", gap:10, padding:"7px 0", borderBottom: i < match.events.length-1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
+                        <span style={{ color:muted, fontSize:11, minWidth:38 }}>{e.time}</span>
+                        <span style={{ fontSize:13 }}>{e.text}</span>
+                      </div>
                 ))
               }
             </div>
@@ -865,7 +884,7 @@ export default function TennisApp() {
                     </div>
                   ))
                 }
-                <div ref={commentsEndRef} />
+
               </div>
               <div style={{ display:"flex", gap:8 }}>
                 <input value={commentName} onChange={e => setCommentName(e.target.value)} placeholder="Nome" style={{ ...inputStyle, width:90, padding:"8px 10px" }} />
@@ -1102,7 +1121,7 @@ export default function TennisApp() {
                     </div>
                   ))
                 }
-                <div ref={commentsEndRef} />
+
               </div>
               <input value={commentName} onChange={e => setCommentName(e.target.value)} placeholder="Seu nome" style={{ ...inputStyle, marginBottom:8 }} />
               <div style={{ display:"flex", gap:8 }}>
