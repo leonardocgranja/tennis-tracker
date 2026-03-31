@@ -215,6 +215,8 @@ export default function TennisApp() {
   const [lastTournament, setLastTournament] = useState({ tournament: "", round: ROUNDS[0], won: false });
   const [showRetrospectiva, setShowRetrospectiva] = useState(false);
   const [showCorrection, setShowCorrection] = useState(false);
+  const [localTournament, setLocalTournament] = useState("");
+  const [localP2Name, setLocalP2Name] = useState("");
   const [tournamentHistory, setTournamentHistory] = useState([]);
   const p1PhotoRef = useRef();
   const p2PhotoRef = useRef();
@@ -308,6 +310,7 @@ export default function TennisApp() {
       const newId = "match-" + Date.now();
       setMatchId(newId);
       const m = emptyMatch(newId); m.p1Name = profile.athleteName || "Maria Amélia"; setMatch(m);
+      setLocalTournament(""); setLocalP2Name("");
       setMode("admin");
       setAdminError(false);
       setTab("controle");
@@ -803,8 +806,12 @@ export default function TennisApp() {
                   </div>
                 )}
 
-                <input value={match.tournament} onChange={e => updateMatch(m => ({ ...m, tournament: e.target.value }))}
-                  placeholder="Nome do torneio / evento" style={{ ...inputStyle, marginBottom:12 }} />
+                <input
+                  value={localTournament}
+                  onChange={e => setLocalTournament(e.target.value)}
+                  onBlur={() => updateMatch(m => ({ ...m, tournament: localTournament }))}
+                  placeholder="Nome do torneio / evento"
+                  style={{ ...inputStyle, marginBottom:12 }} />
 
                 <div style={{ color:muted, fontSize:11, marginBottom:6, letterSpacing:0.5 }}>RODADA</div>
                 <select value={match.round} onChange={e => updateMatch(m => ({ ...m, round: e.target.value }))}
@@ -812,8 +819,12 @@ export default function TennisApp() {
                   {ROUNDS.map(r => <option key={r}>{r}</option>)}
                 </select>
 
-                <input value={match.p2Name} onChange={e => updateMatch(m => ({ ...m, p2Name: e.target.value }))}
-                  placeholder="Nome da adversária / adversário" style={{ ...inputStyle, marginBottom:12 }} />
+                <input
+                  value={localP2Name}
+                  onChange={e => setLocalP2Name(e.target.value)}
+                  onBlur={() => updateMatch(m => ({ ...m, p2Name: localP2Name }))}
+                  placeholder="Nome da adversária / adversário"
+                  style={{ ...inputStyle, marginBottom:12 }} />
 
                 <div style={{ color:muted, fontSize:11, marginBottom:6, letterSpacing:0.5 }}>SUPERFÍCIE</div>
                 <select value={match.surface} onChange={e => updateMatch(m => ({ ...m, surface: e.target.value }))}
