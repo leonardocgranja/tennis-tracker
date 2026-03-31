@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import Onboarding from "./Onboarding.jsx";
+import Retrospectiva, { detectScenario } from "./Retrospectiva.jsx";
 
 const SUPABASE_URL = "https://jokntxttmillstkpyoaq.supabase.co";
 const SUPABASE_KEY = "sb_publishable_nRuJ-FVLvkjyk0tJMwOLTg_VztF_9sg";
@@ -212,6 +213,8 @@ export default function TennisApp() {
   const [nextDate, setNextDate] = useState("");
   const [nextTime, setNextTime] = useState("");
   const [lastTournament, setLastTournament] = useState({ tournament: "", round: ROUNDS[0], won: false });
+  const [showRetrospectiva, setShowRetrospectiva] = useState(false);
+  const [tournamentHistory, setTournamentHistory] = useState([]);
   const p1PhotoRef = useRef();
   const p2PhotoRef = useRef();
   const commentsEndRef = useRef();
@@ -261,6 +264,7 @@ export default function TennisApp() {
     if (isAdmin && match.score.matchOver && match.matchState === "active") {
       updateMatch(m => ({ ...m, matchState: "finished" }));
       setLastTournament({ tournament: match.tournament, round: match.round, won: match.score.matchWinner === "p1" });
+      setTournamentHistory(prev => [...prev.filter(m => m.id !== match.id), { ...match }]);
       setTimeout(() => setFinishModal(true), 800);
     }
   }, [match.score.matchOver]);
@@ -373,6 +377,12 @@ export default function TennisApp() {
   }
 
   function addLike() { updateMatch(m => ({ ...m, likes: (m.likes || 0) + 1 })); }
+  async function shareRetroToTimeline(text) {
+    if (!matchId) return;
+    await supabase.from("comments").insert({ match_id: matchId, name: "✨ Retrospectiva", text });
+    setShowRetrospectiva(false);
+    setToast("Retrospectiva postada na transmissão! 🎾");
+  }
 
   function resetMatch() {
     updateMatch(m => ({ ...m, score: emptyScore(), stats: { p1: emptyStats(), p2: emptyStats() }, events: [], matchState: "idle" }));
@@ -421,6 +431,17 @@ export default function TennisApp() {
   // ─── SCREEN: CHOOSE ──────────────────────────────────────────────────────
   // ── Show onboarding for first-time users ──
   if (!onboardingDone) return <Onboarding onComplete={handleOnboardingComplete} />;
+  if (showRetrospectiva) return (
+    <Retrospectiva
+      match={match}
+      tournamentHistory={tournamentHistory}
+      scenario={detectScenario(match)}
+      athleteName={profile.athleteName || match.p1Name}
+      gender={profile.gender || "f"}
+      onShare={shareRetroToTimeline}
+      onClose={() => setShowRetrospectiva(false)}
+    />
+  );
 
   if (mode === "choose") {
     return (
@@ -783,13 +804,16 @@ export default function TennisApp() {
                     📅 Próxima partida: {new Date(match.nextMatchScheduled.date + "T" + match.nextMatchScheduled.time).toLocaleString("pt-BR", { weekday:"long", day:"numeric", month:"long", hour:"2-digit", minute:"2-digit" })}
                   </div>
                 )}
+                <button onClick={() => setShowRetrospectiva(true)} style={{ ...btnStyle(gold), width:"100%", marginBottom:10, fontSize:13 }}>
+                  ✨ {match.retro ? "Visualizar Retrospectiva" : "Gerar Retrospectiva"}
+                </button>
                 <button onClick={() => setFinishModal(true)} style={{ ...btnStyle(purple), width:"100%", marginBottom:10, fontSize:13 }}>
                   {match.nextMatchScheduled ? "🗓️ Mudar horário da próxima partida" : "📅 Agendar próxima partida"}
                 </button>
                 <button onClick={resetMatch} style={{ ...btnStyle("#4ade80"), width:"100%", fontSize:13, color:"#0d0d1a" }}>
                   {match.score.matchWinner === "p1" && nextRound(match.round)
                     ? `🎾 Check-in da ${nextRound(match.round)}`
-                    : "🎾 Nova Partida"}
+                    : "🏁 Encerrar Torneio"}
                 </button>
               </div>
             )}
