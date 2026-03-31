@@ -260,8 +260,12 @@ export default function TennisApp() {
   useEffect(() => { commentsEndRef.current?.scrollIntoView({ behavior:"smooth" }); }, [comments]);
 
   // Watch for match ending to show finish modal (admin only)
+  const matchOverHandled = useRef(false);
+
   useEffect(() => {
-    if (isAdmin && match.score.matchOver && match.matchState === "active") {
+    // Guard: only fire once per match, and only when transitioning active → finished
+    if (isAdmin && match.score.matchOver && match.matchState === "active" && !matchOverHandled.current) {
+      matchOverHandled.current = true;
       updateMatch(m => ({ ...m, matchState: "finished" }));
       setLastTournament({ tournament: match.tournament, round: match.round, won: match.score.matchWinner === "p1" });
       setTournamentHistory(prev => [...prev.filter(m => m.id !== match.id), { ...match }]);
@@ -271,7 +275,11 @@ export default function TennisApp() {
         setTimeout(() => setFinishModal(true), 800);
       }
     }
-  }, [match.score.matchOver]);
+    // Reset guard when a new match starts
+    if (match.matchState === "idle") {
+      matchOverHandled.current = false;
+    }
+  }, [match.score.matchOver, match.matchState]);
 
   async function loadMatch(mId) {
     const { data } = await supabase.from("matches").select("data").eq("id", mId).single();
