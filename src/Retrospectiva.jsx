@@ -60,19 +60,28 @@ export default function Retrospectiva({ match, tournamentHistory, scenario, athl
       const prompt = buildPrompt(scenario, match, tournamentHistory, athleteName, gender);
       const response = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
           max_tokens: 1000,
           messages: [{ role: "user", content: prompt }],
         }),
       });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error?.message || "API error " + response.status);
+      }
       const data = await response.json();
       const generated = data.content?.map(b => b.text || "").join("") || "";
       if (!generated) throw new Error("vazio");
       setRetText(generated);
       setPhase("done");
-    } catch {
+    } catch (e) {
+      console.error("Retrospectiva error:", e);
       setError("Não foi possível gerar. Tente novamente.");
       setPhase("idle");
     }
