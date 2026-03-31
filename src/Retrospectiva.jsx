@@ -82,7 +82,7 @@ export default function Retrospectiva({ match, tournamentHistory, scenario, athl
       setPhase("done");
     } catch (e) {
       console.error("Retrospectiva error:", e);
-      setError("Não foi possível gerar. Tente novamente.");
+      setError(`Erro: ${e.message || "Não foi possível gerar. Tente novamente."}`);
       setPhase("idle");
     }
   }
