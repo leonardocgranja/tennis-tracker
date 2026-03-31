@@ -214,6 +214,7 @@ export default function TennisApp() {
   const [nextTime, setNextTime] = useState("");
   const [lastTournament, setLastTournament] = useState({ tournament: "", round: ROUNDS[0], won: false });
   const [showRetrospectiva, setShowRetrospectiva] = useState(false);
+  const [showCorrection, setShowCorrection] = useState(false);
   const [tournamentHistory, setTournamentHistory] = useState([]);
   const p1PhotoRef = useRef();
   const p2PhotoRef = useRef();
@@ -587,6 +588,84 @@ export default function TennisApp() {
 
       {toast && <Toast message={toast} onDone={() => setToast(null)} />}
 
+      {/* ── Correction Modal ── */}
+      {showCorrection && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:16 }} onClick={() => setShowCorrection(false)}>
+          <div style={{ background:"#16162a", border:"1px solid rgba(241,163,50,0.4)", borderRadius:20, padding:24, maxWidth:400, width:"100%", maxHeight:"90vh", overflowY:"auto" }} onClick={e => e.stopPropagation()}>
+            <div style={{ color:"#f59e0b", fontWeight:800, fontSize:17, marginBottom:4 }}>✏️ Corrigir Placar</div>
+            <div style={{ color:muted, fontSize:12, marginBottom:20 }}>Ajuste o placar diretamente caso tenha perdido algum ponto.</div>
+
+            {/* Sets */}
+            <div style={{ color:gold, fontSize:11, fontWeight:700, letterSpacing:1, marginBottom:8 }}>SETS</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
+              {["p1","p2"].map(p => (
+                <div key={p}>
+                  <div style={{ color:muted, fontSize:11, marginBottom:4 }}>{p==="p1" ? match.p1Name : match.p2Name}</div>
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <button onClick={() => updateMatch(m => ({ ...m, score: { ...m.score, [p+"Sets"]: Math.max(0, m.score[p+"Sets"]-1) } }))} style={{ width:32, height:32, borderRadius:8, background:"rgba(255,255,255,0.08)", border:"none", color:text, fontSize:18, cursor:"pointer" }}>−</button>
+                    <div style={{ fontSize:24, fontWeight:900, color:gold, minWidth:24, textAlign:"center" }}>{match.score[p+"Sets"]}</div>
+                    <button onClick={() => updateMatch(m => ({ ...m, score: { ...m.score, [p+"Sets"]: Math.min(2, m.score[p+"Sets"]+1) } }))} style={{ width:32, height:32, borderRadius:8, background:"rgba(255,255,255,0.08)", border:"none", color:text, fontSize:18, cursor:"pointer" }}>+</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Games */}
+            <div style={{ color:gold, fontSize:11, fontWeight:700, letterSpacing:1, marginBottom:8 }}>GAMES (SET ATUAL)</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
+              {["p1","p2"].map(p => (
+                <div key={p}>
+                  <div style={{ color:muted, fontSize:11, marginBottom:4 }}>{p==="p1" ? match.p1Name : match.p2Name}</div>
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <button onClick={() => updateMatch(m => ({ ...m, score: { ...m.score, [p+"Games"]: Math.max(0, m.score[p+"Games"]-1) } }))} style={{ width:32, height:32, borderRadius:8, background:"rgba(255,255,255,0.08)", border:"none", color:text, fontSize:18, cursor:"pointer" }}>−</button>
+                    <div style={{ fontSize:24, fontWeight:900, color:gold, minWidth:24, textAlign:"center" }}>{match.score[p+"Games"]}</div>
+                    <button onClick={() => updateMatch(m => ({ ...m, score: { ...m.score, [p+"Games"]: Math.min(7, m.score[p+"Games"]+1) } }))} style={{ width:32, height:32, borderRadius:8, background:"rgba(255,255,255,0.08)", border:"none", color:text, fontSize:18, cursor:"pointer" }}>+</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Points */}
+            {!match.score.inSuperTiebreak ? (
+              <>
+                <div style={{ color:gold, fontSize:11, fontWeight:700, letterSpacing:1, marginBottom:8 }}>PONTOS (GAME ATUAL)</div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:20 }}>
+                  {["p1","p2"].map(p => (
+                    <div key={p}>
+                      <div style={{ color:muted, fontSize:11, marginBottom:4 }}>{p==="p1" ? match.p1Name : match.p2Name}</div>
+                      <select value={match.score[p+"Points"]} onChange={e => updateMatch(m => ({ ...m, score: { ...m.score, [p+"Points"]: Number(e.target.value) } }))}
+                        style={{ width:"100%", padding:"8px 10px", borderRadius:8, background:"#1a1a2e", border:"1px solid rgba(201,169,110,0.2)", color:text, fontSize:14, fontFamily:"Georgia, serif" }}>
+                        {[0,1,2,3,4].map((v,i) => <option key={v} value={v}>{["0","15","30","40","AD"][i]}</option>)}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ color:gold, fontSize:11, fontWeight:700, letterSpacing:1, marginBottom:8 }}>PONTOS (SUPER TIE-BREAK)</div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:20 }}>
+                  {["p1","p2"].map(p => (
+                    <div key={p}>
+                      <div style={{ color:muted, fontSize:11, marginBottom:4 }}>{p==="p1" ? match.p1Name : match.p2Name}</div>
+                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        <button onClick={() => updateMatch(m => ({ ...m, score: { ...m.score, [p+"Points"]: Math.max(0, m.score[p+"Points"]-1) } }))} style={{ width:32, height:32, borderRadius:8, background:"rgba(255,255,255,0.08)", border:"none", color:text, fontSize:18, cursor:"pointer" }}>−</button>
+                        <div style={{ fontSize:24, fontWeight:900, color:gold, minWidth:28, textAlign:"center" }}>{match.score[p+"Points"]}</div>
+                        <button onClick={() => updateMatch(m => ({ ...m, score: { ...m.score, [p+"Points"]: m.score[p+"Points"]+1 } }))} style={{ width:32, height:32, borderRadius:8, background:"rgba(255,255,255,0.08)", border:"none", color:text, fontSize:18, cursor:"pointer" }}>+</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            <button onClick={() => { setShowCorrection(false); setToast("Placar atualizado! ✓"); }} style={{ width:"100%", padding:"14px", background:"linear-gradient(135deg,#f59e0b,#d97706)", border:"none", borderRadius:12, color:"#0d0d1a", fontWeight:800, fontSize:15, cursor:"pointer", fontFamily:"Georgia, serif" }}>
+              ✓ Confirmar Correção
+            </button>
+          </div>
+        </div>
+      )}
+
       <div style={{ maxWidth:700, margin:"0 auto", padding:"20px 16px" }}>
 
         {/* ── PLACAR ── */}
@@ -773,6 +852,7 @@ export default function TennisApp() {
                 <div style={{ textAlign:"center", background:card, borderRadius:12, padding:12, fontSize:13, color:muted, marginBottom:16 }}>
                   {isSuperTB ? `Super Tie-Break · ${match.score.p1Points}–${match.score.p2Points}` : `Sets: ${match.score.p1Sets}–${match.score.p2Sets} · Games: ${match.score.p1Games}–${match.score.p2Games}`}
                 </div>
+                <button onClick={() => setShowCorrection(true)} style={{ ...btnStyle("#f59e0b"), width:"100%", fontSize:13, marginBottom:10 }}>✏️ Corrigir Placar</button>
                 <button onClick={resetMatch} style={{ ...btnStyle("#e05050"), width:"100%", fontSize:13 }}>🔄 Resetar Partida</button>
               </div>
             )}
