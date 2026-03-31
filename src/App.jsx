@@ -294,21 +294,32 @@ export default function TennisApp() {
       if (s.p1Points >= 9 && s.p1Points > s.p2Points) mpPlayer = "p1";
       else if (s.p2Points >= 9 && s.p2Points > s.p1Points) mpPlayer = "p2";
     } else {
-      // Normal: leading 1 set to 0, at 40 in a game that would close the set and match
-      const p1mp = s.p1Sets === 1 && s.p2Sets === 0 && s.p1Games >= 5 && s.p1Games > s.p2Games && s.p1Points === 3 && s.p2Points < 3;
-      const p2mp = s.p2Sets === 1 && s.p1Sets === 0 && s.p2Games >= 5 && s.p2Games > s.p1Games && s.p2Points === 3 && s.p1Points < 3;
-      if (p1mp) mpPlayer = "p1";
-      else if (p2mp) mpPlayer = "p2";
+      // Normal game match point scenarios:
+      // Scenario A: Leading 1 set to 0, at 40, in a game that closes the set (games >= 5, leading)
+      const p1leadsSet = s.p1Sets === 1 && s.p2Sets === 0;
+      const p2leadsSet = s.p2Sets === 1 && s.p1Sets === 0;
+      const p1gamePoint = s.p1Points === 3 && s.p2Points < 3; // 40 with no deuce threat
+      const p2gamePoint = s.p2Points === 3 && s.p1Points < 3;
+      const p1setPoint = (s.p1Games >= 5 && s.p1Games > s.p2Games) || s.p1Games === 6; // would win set
+      const p2setPoint = (s.p2Games >= 5 && s.p2Games > s.p1Games) || s.p2Games === 6;
+      if (p1leadsSet && p1gamePoint && p1setPoint) mpPlayer = "p1";
+      else if (p2leadsSet && p2gamePoint && p2setPoint) mpPlayer = "p2";
     }
 
     if (mpPlayer && !matchPointPosted.current) {
       matchPointPosted.current = true;
       const name = mpPlayer === "p1" ? match.p1Name : match.p2Name;
+      // Post to comments timeline for fans
       supabase.from("comments").insert({
         match_id: matchId,
         name: "🎾 Match Point",
         text: `⚡ MATCH POINT para ${name}! O próximo ponto pode encerrar a partida!`,
       });
+      // Also add to events log
+      updateMatch(m => ({
+        ...m,
+        events: [{ text: `🎾 MATCH POINT — ${name}!`, time: new Date().toLocaleTimeString("pt-BR", { hour:"2-digit", minute:"2-digit" }) }, ...m.events].slice(0, 60)
+      }));
     }
 
     if (!mpPlayer) matchPointPosted.current = false;
@@ -744,11 +755,35 @@ export default function TennisApp() {
         {/* ── PLACAR ── */}
         {tab === "placar" && (
           <div>
-            {/* Super Tie-break banner */}
-            {isSuperTB && (
-              <div style={{ background:"linear-gradient(135deg,rgba(201,169,110,0.15),rgba(124,111,158,0.15))", border:`1px solid rgba(201,169,110,0.4)`, borderRadius:14, padding:"12px 16px", marginBottom:16, textAlign:"center" }}>
-                <div style={{ color:gold, fontWeight:800, fontSize:15 }}>🎯 Super Tie-Break</div>
-                <div style={{ color:muted, fontSize:12 }}>Primeiro a 10 pontos (diferença de 2)</div>
+            {/* ── Game Score Hero Card ── */}
+            {match.matchState === "active" && (
+              <div style={{ background: isSuperTB ? "linear-gradient(135deg,rgba(201,169,110,0.18),rgba(124,111,158,0.18))" : "linear-gradient(135deg,rgba(201,169,110,0.12),rgba(13,13,26,0.8))", border:`2px solid rgba(201,169,110,${isSuperTB ? "0.5" : "0.3"})`, borderRadius:20, padding:"20px 24px", marginBottom:16, textAlign:"center" }}>
+                <div style={{ color:muted, fontSize:11, letterSpacing:2, textTransform:"uppercase", marginBottom:8 }}>
+                  {isSuperTB ? "🎯 Super Tie-Break" : "Placar do Game"}
+                </div>
+                <div style={{ display:"flex", justifyContent:"center", alignItems:"center", gap:20 }}>
+                  <div style={{ flex:1, textAlign:"right" }}>
+                    <div style={{ fontSize:11, color:muted, marginBottom:4 }}>{match.p1Name.split(" ")[0]}</div>
+                    <div style={{ fontSize:64, fontWeight:900, lineHeight:1, color: isSuperTB ? (match.score.p1Points > match.score.p2Points ? goldLight : text) : match.score.p1Points > match.score.p2Points ? goldLight : text }}>
+                      {isSuperTB ? match.score.p1Points : pt(match.score.p1Points, "normal")}
+                    </div>
+                  </div>
+                  <div style={{ fontSize:28, color:muted, fontWeight:300 }}>×</div>
+                  <div style={{ flex:1, textAlign:"left" }}>
+                    <div style={{ fontSize:11, color:muted, marginBottom:4 }}>{(match.p2Name || "Adv").split(" ")[0]}</div>
+                    <div style={{ fontSize:64, fontWeight:900, lineHeight:1, color: isSuperTB ? (match.score.p2Points > match.score.p1Points ? goldLight : text) : match.score.p2Points > match.score.p1Points ? goldLight : text }}>
+                      {isSuperTB ? match.score.p2Points : pt(match.score.p2Points, "normal")}
+                    </div>
+                  </div>
+                </div>
+                {isSuperTB && (
+                  <div style={{ color:muted, fontSize:11, marginTop:8 }}>Primeiro a 10 pontos · diferença de 2</div>
+                )}
+                {!isSuperTB && (
+                  <div style={{ color:muted, fontSize:11, marginTop:8 }}>
+                    Games: {match.score.p1Games}–{match.score.p2Games} · Sets: {match.score.p1Sets}–{match.score.p2Sets}
+                  </div>
+                )}
               </div>
             )}
 
