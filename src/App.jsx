@@ -265,22 +265,19 @@ export default function TennisApp() {
   // Watch for match ending to show finish modal (admin only)
   const matchOverHandled = useRef(false);
 
-  useEffect(() => {
-    // Guard: only fire once per match, and only when transitioning active → finished
-    if (isAdmin && match.score.matchOver && match.matchState === "active" && !matchOverHandled.current) {
-      matchOverHandled.current = true;
-      updateMatch(m => ({ ...m, matchState: "finished" }));
-      setLastTournament({ tournament: match.tournament, round: match.round, won: match.score.matchWinner === "p1" });
-      setTournamentHistory(prev => [...prev.filter(m => m.id !== match.id), { ...match }]);
-      const isFinal = match.round === "Final";
-      if (!isFinal) {
-        setTimeout(() => setFinishModal(true), 800);
-      }
+  function handleMatchOver(currentMatch, newScore) {
+    if (matchOverHandled.current) return;
+    matchOverHandled.current = true;
+    const finishedMatch = { ...currentMatch, score: newScore, matchState: "finished" };
+    saveMatch(finishedMatch);
+    setMatch(finishedMatch);
+    setLastTournament({ tournament: currentMatch.tournament, round: currentMatch.round, won: newScore.matchWinner === "p1" });
+    setTournamentHistory(prev => [...prev.filter(m => m.id !== currentMatch.id), finishedMatch]);
+    const isFinal = currentMatch.round === "Final";
+    if (!isFinal) {
+      setTimeout(() => setFinishModal(true), 800);
     }
-    if (match.matchState === "idle") {
-      matchOverHandled.current = false;
-    }
-  }, [match.score.matchOver, match.matchState]);
+  }
 
   // Match point notification — with guard to avoid duplicate posts
   const matchPointPosted = useRef(false);
@@ -288,15 +285,16 @@ export default function TennisApp() {
   useEffect(() => {
     if (!isAdmin || match.matchState !== "active" || !matchId) return;
     const s = match.score;
+    if (s.matchOver) return; // already over, no need for match point
 
     let mpPlayer = null;
 
     if (s.inSuperTiebreak) {
-      // Super TB match point: needs 9+ pts AND leads by 1+
+      // Super TB: match point at 9+ with lead of 1+
       if (s.p1Points >= 9 && s.p1Points > s.p2Points) mpPlayer = "p1";
       else if (s.p2Points >= 9 && s.p2Points > s.p1Points) mpPlayer = "p2";
     } else {
-      // Normal game match point: leading set 1-0, serving for match (game 40, opponent < 40)
+      // Normal: leading 1 set to 0, at 40 in a game that would close the set and match
       const p1mp = s.p1Sets === 1 && s.p2Sets === 0 && s.p1Games >= 5 && s.p1Games > s.p2Games && s.p1Points === 3 && s.p2Points < 3;
       const p2mp = s.p2Sets === 1 && s.p1Sets === 0 && s.p2Games >= 5 && s.p2Games > s.p1Games && s.p2Points === 3 && s.p1Points < 3;
       if (p1mp) mpPlayer = "p1";
@@ -313,15 +311,12 @@ export default function TennisApp() {
       });
     }
 
-    // Reset guard when no longer match point (e.g. point lost)
-    if (!mpPlayer) {
-      matchPointPosted.current = false;
-    }
+    if (!mpPlayer) matchPointPosted.current = false;
   }, [
     match.score.p1Points, match.score.p2Points,
-    match.score.p1Games, match.score.p2Games,
-    match.score.p1Sets, match.score.p2Sets,
-    match.score.inSuperTiebreak
+    match.score.p1Games,  match.score.p2Games,
+    match.score.p1Sets,   match.score.p2Sets,
+    match.score.inSuperTiebreak, match.matchState
   ]);
 
   async function loadMatch(mId) {
@@ -395,16 +390,22 @@ export default function TennisApp() {
       ? `${prefix}Erro não forçado → ponto para ${wName}`
       : `${prefix}${shotLabels[type]} de ${wName}`;
 
-    updateMatch(m => {
-      const newScore = calcPoint(m.score, w);
-      const newStats = { p1: { ...m.stats.p1 }, p2: { ...m.stats.p2 } };
-      newStats[w].points++;
-      if (type === "ace") newStats[w].aces++;
-      if (type === "winner") newStats[w].winners++;
-      if (type === "unforced") newStats[opp].unforced++;
-      const newEvent = { text: eventText, time: new Date().toLocaleTimeString("pt-BR", { hour:"2-digit", minute:"2-digit" }) };
-      return { ...m, score: newScore, stats: newStats, events: [newEvent, ...m.events].slice(0, 60) };
-    });
+    const newScore = calcPoint(match.score, w);
+    const newStats = { p1: { ...match.stats.p1 }, p2: { ...match.stats.p2 } };
+    newStats[w].points++;
+    if (type === "ace") newStats[w].aces++;
+    if (type === "winner") newStats[w].winners++;
+    if (type === "unforced") newStats[opp].unforced++;
+    const newEvent = { text: eventText, time: new Date().toLocaleTimeString("pt-BR", { hour:"2-digit", minute:"2-digit" }) };
+    const updatedMatch = { ...match, score: newScore, stats: newStats, events: [newEvent, ...match.events].slice(0, 60) };
+
+    if (newScore.matchOver) {
+      // Handle match end directly — no useEffect needed
+      handleMatchOver(updatedMatch, newScore);
+    } else {
+      setMatch(updatedMatch);
+      saveMatch(updatedMatch);
+    }
     setRally(null);
   }
 
@@ -441,6 +442,8 @@ export default function TennisApp() {
   }
 
   function resetMatch() {
+    matchOverHandled.current = false;
+    matchPointPosted.current = false;
     updateMatch(m => ({ ...m, score: emptyScore(), stats: { p1: emptyStats(), p2: emptyStats() }, events: [], matchState: "idle" }));
     setRally(null);
   }
